@@ -2,6 +2,7 @@ package clockwork
 
 import (
 	"testing"
+	"testing/quick"
 	"time"
 )
 
@@ -86,4 +87,55 @@ func TestFakeTicker_Race2(t *testing.T) {
 		<-ft.Chan()
 	}
 	ft.Stop()
+}
+
+// Issue 30
+func TestFakeTickerMultipleTicks(t *testing.T) {
+
+	// Simulate testing a minimal function. This simply counts the number of ticks
+	// received until it receives from s, then returns the count of ticks to
+	// result channel r.
+	f := func(k Ticker, s chan struct{}, r chan int) {
+		var i int
+		for {
+			select {
+			case <-k.Chan():
+				i++
+			case <-s:
+				r <- i
+			}
+		}
+	}
+
+	// Call the test function in a goroutine. The function receives a tick
+	// every millisecond. While the function loops, advance the fake clock
+	// an arbitrary number of milliseconds. The number of ticks receives
+	// should be equal to the number of milliseconds we advance the clock.
+	var a int
+	if err := quick.Check(func(n uint) bool {
+		fc := NewFakeClock()
+		tk := fc.NewTicker(time.Duration(1) * time.Millisecond)
+		s := make(chan struct{})
+		r := make(chan int)
+		go f(tk, s, r)
+		fc.Advance(time.Duration(n) * time.Millisecond)
+		s <- struct{}{}
+		select {
+		case a = <-r:
+			if a != int(n) {
+				return false
+			}
+		default:
+			return false
+		}
+		return true
+	}, &quick.Config{
+		MaxCount: 1000,
+	}); err != nil {
+		ce := err.(*quick.CheckError)
+		t.Fatalf("expected to receive %v ticks but got %v", ce.In[0], a)
+	}
+
+	// TODO: Limit the highest value of n in the quickcheck function
+
 }
