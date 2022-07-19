@@ -112,7 +112,9 @@ func TestFakeTickerMultipleTicks(t *testing.T) {
 	// an arbitrary number of milliseconds. The number of ticks receives
 	// should be equal to the number of milliseconds we advance the clock.
 	var a int
-	if err := quick.Check(func(n uint) bool {
+	// Limiting the number of ticks to make debugging more manageable while
+	// still allowing for an arbitrarily large number.
+	if err := quick.Check(func(n uint8) bool {
 		fc := NewFakeClock()
 		tk := fc.NewTicker(time.Duration(1) * time.Millisecond)
 		s := make(chan struct{})
@@ -120,12 +122,8 @@ func TestFakeTickerMultipleTicks(t *testing.T) {
 		go f(tk, s, r)
 		fc.Advance(time.Duration(n) * time.Millisecond)
 		s <- struct{}{}
-		select {
-		case a = <-r:
-			if a != int(n) {
-				return false
-			}
-		default:
+		a = <-r
+		if a != int(n) {
 			return false
 		}
 		return true
