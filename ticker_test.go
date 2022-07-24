@@ -134,6 +134,4 @@ func TestFakeTickerMultipleTicks(t *testing.T) {
 		t.Fatalf("expected to receive %v ticks but got %v", ce.In[0], a)
 	}
 
-	// TODO: Limit the highest value of n in the quickcheck function
-
 }
