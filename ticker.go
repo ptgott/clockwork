@@ -20,6 +20,8 @@ func (rt *realTicker) Chan() <-chan time.Time {
 }
 
 type fakeTicker struct {
+	// Internal channel used for queuing batches of ticks for when a caller
+	// advances the fake clock. Should be unbuffered.
 	c      chan time.Time
 	stop   chan bool
 	clock  FakeClock
@@ -27,7 +29,24 @@ type fakeTicker struct {
 }
 
 func (ft *fakeTicker) Chan() <-chan time.Time {
-	return ft.c
+	s := []time.Time{}
+
+	// Buffer ticks from the internal tick channel until waking the tick thread
+	// sleeper closes the channel.
+	for {
+		if t, ok := <-ft.c; ok {
+			s = append(s, t)
+			continue
+		}
+		break
+	}
+
+	c := make(chan time.Time, len(s))
+
+	for _, r := range s {
+		c <- r
+	}
+	return c
 }
 
 func (ft *fakeTicker) Stop() {
@@ -46,26 +65,17 @@ func (ft *fakeTicker) runTickThread() {
 			case <-ft.stop:
 				return
 			case <-next:
-				// We send the time that the tick was supposed to occur at.
-				tick := nextTick
 				// Before sending the tick, we'll compute the next tick time and star the clock.After call.
 				now := ft.clock.Now()
-				// First, figure out how many periods there have been between "now" and the time we were
-				// supposed to have trigged, then advance over all of those.
-				skipTicks := (now.Sub(tick) + ft.period - 1) / ft.period
-				nextTick = nextTick.Add(skipTicks * ft.period)
-				// Now, keep advancing until we are past now. This should happen at most once.
+				// Send ticks to the internal channel until
+				// we're past the current time of the fake clock
 				for !nextTick.After(now) {
 					nextTick = nextTick.Add(ft.period)
+					ft.c <- nextTick
 				}
-				// Figure out how long between now and the next scheduled tick, then wait that long.
-				remaining := nextTick.Sub(now)
-				next = ft.clock.After(remaining)
-				// Finally, we can actually send the tick.
-				select {
-				case ft.c <- tick:
-				default:
-				}
+				// Indicate to consumers of ft's external tick
+				// channel that the channel is ready
+				close(ft.c)
 			}
 		}
 	}()
