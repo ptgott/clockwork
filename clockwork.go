@@ -154,10 +154,11 @@ func (fc *fakeClock) Since(t time.Time) time.Duration {
 // Advance have moved the clock passed the given duration
 func (fc *fakeClock) NewTicker(d time.Duration) Ticker {
 	ft := &fakeTicker{
-		c:      make(chan time.Time),
-		stop:   make(chan bool, 1),
-		clock:  fc,
-		period: d,
+		ticks:         []time.Time{},
+		tickChanReady: &sync.Mutex{},
+		stop:          make(chan bool, 1),
+		clock:         fc,
+		period:        d,
 	}
 	ft.runTickThread()
 	return ft
