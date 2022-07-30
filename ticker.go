@@ -55,7 +55,9 @@ func (ft *fakeTicker) Stop() {
 // between the start time and the fake clock's current time. During an Advance()
 // call, this simulates sending ticks to the fakeTicker's channel over the
 // course of the elapsed time.
-func (ft *fakeTicker) loadTicks(start time.Time) {
+// Returns the time.Time of the latest tick so we can re-initialize the fake
+// Ticker.
+func (ft *fakeTicker) loadTicks(start time.Time) time.Time {
 	ft.tickChanReady.Lock()
 	defer ft.tickChanReady.Unlock()
 
@@ -66,6 +68,7 @@ func (ft *fakeTicker) loadTicks(start time.Time) {
 		start = start.Add(ft.period)
 		ft.ticks = append(ft.ticks, start)
 	}
+	return start
 }
 
 // runTickThread initializes a background goroutine to send the tick time to the ticker channel
@@ -82,9 +85,11 @@ func (ft *fakeTicker) runTickThread() {
 				// the ticks that would have elapsed during this
 				// time and reset the tick thread.
 			case <-next:
-				ft.loadTicks(nextTick)
-				// TODO: Add the code that resets next again for the
-				// next Advance call
+				nextTick := ft.loadTicks(nextTick)
+				// Figure out how long between now and the next
+				// scheduled tick, then wait that long.
+				remaining := nextTick.Sub(ft.clock.Now())
+				next = ft.clock.After(remaining)
 			}
 		}
 	}()
