@@ -23,7 +23,9 @@ func (rt *realTicker) Chan() <-chan time.Time {
 type fakeTicker struct {
 	// Used for blocking access to the tick channel until it is ready, i.e.,
 	// until all ticks to be sent are queued.
-	tickChanReady *sync.Mutex
+	tickChanReady *sync.Cond
+	// Used for locking tickChanReady
+	mu *sync.Mutex
 	// Queued ticks. fakeTicker sends these to a lazily initialized channel
 	// when Chan is called.
 	ticks  []time.Time
@@ -36,8 +38,15 @@ type fakeTicker struct {
 // initialized and buffered to hold all of the ticks that elapsed while
 // advancing the fake clock.
 func (ft *fakeTicker) Chan() <-chan time.Time {
-	ft.tickChanReady.Lock()
-	defer ft.tickChanReady.Unlock()
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+
+	// Loop to double-check the condition. See:
+	// https://pkg.go.dev/sync#Cond.Wait
+	for len(ft.ticks) == 0 {
+		ft.tickChanReady.Wait()
+	}
+
 	c := make(chan time.Time, len(ft.ticks))
 
 	for _, r := range ft.ticks {
@@ -55,12 +64,13 @@ func (ft *fakeTicker) Stop() {
 // between the start time and the fake clock's current time. During an Advance()
 // call, this simulates sending ticks to the fakeTicker's channel over the
 // course of the elapsed time.
+//
 // Returns the time.Time of the latest tick so we can re-initialize the fake
 // Ticker.
+//
+// Also manages broadcasting a signal to other goroutines waiting for the the
+// tick channel that the channel is ready to receive from.
 func (ft *fakeTicker) loadTicks(start time.Time) time.Time {
-	ft.tickChanReady.Lock()
-	defer ft.tickChanReady.Unlock()
-
 	now := ft.clock.Now()
 	// Send ticks to the internal channel until
 	// we're past the current time of the fake clock
@@ -68,6 +78,8 @@ func (ft *fakeTicker) loadTicks(start time.Time) time.Time {
 		start = start.Add(ft.period)
 		ft.ticks = append(ft.ticks, start)
 	}
+
+	ft.tickChanReady.Broadcast()
 	return start
 }
 

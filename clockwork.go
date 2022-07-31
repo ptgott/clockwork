@@ -153,9 +153,11 @@ func (fc *fakeClock) Since(t time.Time) time.Duration {
 // NewTicker returns a ticker that will expire only after calls to fakeClock
 // Advance have moved the clock passed the given duration
 func (fc *fakeClock) NewTicker(d time.Duration) Ticker {
+	mu := &sync.Mutex{}
 	ft := &fakeTicker{
 		ticks:         []time.Time{},
-		tickChanReady: &sync.Mutex{},
+		tickChanReady: sync.NewCond(mu),
+		mu:            mu,
 		stop:          make(chan bool, 1),
 		clock:         fc,
 		period:        d,
