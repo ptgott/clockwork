@@ -155,7 +155,8 @@ func (fc *fakeClock) Since(t time.Time) time.Duration {
 func (fc *fakeClock) NewTicker(d time.Duration) Ticker {
 	mu := &sync.Mutex{}
 	ft := &fakeTicker{
-		ticks:         []time.Time{},
+		// ticks is initialized when the tick channel is ready for receivers
+		ticks:         nil,
 		tickChanReady: sync.NewCond(mu),
 		mu:            mu,
 		stop:          make(chan bool, 1),

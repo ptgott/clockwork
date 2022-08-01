@@ -27,7 +27,8 @@ type fakeTicker struct {
 	// Used for locking tickChanReady
 	mu *sync.Mutex
 	// Queued ticks. fakeTicker sends these to a lazily initialized channel
-	// when Chan is called.
+	// when Chan is called. The fakeTicker is considered ready for receivers
+	// from Chan when ticks is non-nil.
 	ticks  []time.Time
 	stop   chan bool
 	clock  FakeClock
@@ -37,13 +38,16 @@ type fakeTicker struct {
 // Chan retrieves the fakeTicker's tick channel. The channel is lazily
 // initialized and buffered to hold all of the ticks that elapsed while
 // advancing the fake clock.
+//
+// If there are no ticks to send, the returned channel will be unbuffered
+// with no senders.
 func (ft *fakeTicker) Chan() <-chan time.Time {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 
 	// Loop to double-check the condition. See:
 	// https://pkg.go.dev/sync#Cond.Wait
-	for len(ft.ticks) == 0 {
+	for ft.ticks != nil {
 		ft.tickChanReady.Wait()
 	}
 
@@ -92,6 +96,8 @@ func (ft *fakeTicker) runTickThread() {
 		for {
 			select {
 			case <-ft.stop:
+				// Initialize the tick channel with zero ticks
+				ft.loadTicks(ft.clock.Now())
 				return
 				// We've advanced the fake clock, so round up
 				// the ticks that would have elapsed during this
