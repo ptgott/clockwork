@@ -63,30 +63,6 @@ func (ft *fakeTicker) Stop() {
 	ft.stop <- true
 }
 
-// loadTicks holds the tick channel readiness lock and populates the
-// fakeTicker's internal tick queue, sending all ticks that would have elapsed
-// between the start time and the fake clock's current time. During an Advance()
-// call, this simulates sending ticks to the fakeTicker's channel over the
-// course of the elapsed time.
-//
-// Returns the time.Time of the latest tick so we can re-initialize the fake
-// Ticker.
-//
-// Also manages broadcasting a signal to other goroutines waiting for the the
-// tick channel that the channel is ready to receive from.
-func (ft *fakeTicker) loadTicks(start time.Time) time.Time {
-	now := ft.clock.Now()
-	// Send ticks to the internal channel until
-	// we're past the current time of the fake clock
-	for !start.After(now) {
-		start = start.Add(ft.period)
-		ft.ticks = append(ft.ticks, start)
-	}
-
-	ft.tickChanReady.Broadcast()
-	return start
-}
-
 // runTickThread initializes a background goroutine to send the tick time to the ticker channel
 // after every period.
 func (ft *fakeTicker) runTickThread() {
@@ -97,17 +73,29 @@ func (ft *fakeTicker) runTickThread() {
 			select {
 			case <-ft.stop:
 				// Initialize the tick channel with zero ticks
-				ft.loadTicks(ft.clock.Now())
+				ft.tickChanReady.Broadcast()
 				return
+			case <-next:
+
+				now := ft.clock.Now()
 				// We've advanced the fake clock, so round up
 				// the ticks that would have elapsed during this
-				// time and reset the tick thread.
-			case <-next:
-				nextTick := ft.loadTicks(nextTick)
+				// time and reset the tick thread. Send ticks
+				// to the internal channel until we're past the
+				// current time of the fake clock
+				for !nextTick.After(now) {
+					nextTick = nextTick.Add(ft.period)
+					ft.ticks = append(ft.ticks, nextTick)
+				}
+
 				// Figure out how long between now and the next
 				// scheduled tick, then wait that long.
 				remaining := nextTick.Sub(ft.clock.Now())
 				next = ft.clock.After(remaining)
+
+				// Indicate that the tick channel is ready for
+				// receivers
+				ft.tickChanReady.Broadcast()
 			}
 		}
 	}()
