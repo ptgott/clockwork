@@ -47,7 +47,7 @@ func (ft *fakeTicker) Chan() <-chan time.Time {
 
 	// Loop to double-check the condition. See:
 	// https://pkg.go.dev/sync#Cond.Wait
-	for ft.ticks != nil {
+	for ft.ticks == nil {
 		ft.tickChanReady.Wait()
 	}
 
@@ -73,6 +73,7 @@ func (ft *fakeTicker) runTickThread() {
 			select {
 			case <-ft.stop:
 				// Initialize the tick channel with zero ticks
+				ft.ticks = []time.Time{}
 				ft.tickChanReady.Broadcast()
 				return
 			case <-next:
@@ -83,6 +84,7 @@ func (ft *fakeTicker) runTickThread() {
 				// time and reset the tick thread. Send ticks
 				// to the internal channel until we're past the
 				// current time of the fake clock
+				ft.ticks = []time.Time{}
 				for !nextTick.After(now) {
 					nextTick = nextTick.Add(ft.period)
 					ft.ticks = append(ft.ticks, nextTick)
