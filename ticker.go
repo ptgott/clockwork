@@ -86,8 +86,8 @@ func (ft *fakeTicker) runTickThread() {
 				// current time of the fake clock
 				ft.ticks = []time.Time{}
 				for !nextTick.After(now) {
-					nextTick = nextTick.Add(ft.period)
 					ft.ticks = append(ft.ticks, nextTick)
+					nextTick = nextTick.Add(ft.period)
 				}
 
 				// Figure out how long between now and the next
