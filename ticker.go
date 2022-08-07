@@ -1,7 +1,6 @@
 package clockwork
 
 import (
-	"sync"
 	"time"
 )
 
@@ -21,18 +20,12 @@ func (rt *realTicker) Chan() <-chan time.Time {
 }
 
 type fakeTicker struct {
-	// Used for blocking access to the tick channel until it is ready, i.e.,
-	// until all ticks to be sent are queued.
-	tickChanReady *sync.Cond
-	// Used for locking tickChanReady
-	mu *sync.Mutex
-	// Queued ticks. fakeTicker sends these to a lazily initialized channel
-	// when Chan is called. The fakeTicker is considered ready for receivers
-	// from Chan when ticks is non-nil.
-	ticks  []time.Time
-	stop   chan bool
-	clock  FakeClock
-	period time.Duration
+	// Used for blocking access to the tick channel until there are ticks
+	// ready to be queued.
+	nextTicks chan []time.Time
+	stop      chan bool
+	clock     FakeClock
+	period    time.Duration
 }
 
 // Chan retrieves the fakeTicker's tick channel. The channel is lazily
@@ -42,18 +35,11 @@ type fakeTicker struct {
 // If there are no ticks to send, the returned channel will be unbuffered
 // with no senders.
 func (ft *fakeTicker) Chan() <-chan time.Time {
-	ft.mu.Lock()
-	defer ft.mu.Unlock()
+	ticks := <-ft.nextTicks
 
-	// Loop to double-check the condition. See:
-	// https://pkg.go.dev/sync#Cond.Wait
-	for ft.ticks == nil {
-		ft.tickChanReady.Wait()
-	}
+	c := make(chan time.Time, len(ticks))
 
-	c := make(chan time.Time, len(ft.ticks))
-
-	for _, r := range ft.ticks {
+	for _, r := range ticks {
 		c <- r
 	}
 	return c
@@ -73,8 +59,9 @@ func (ft *fakeTicker) runTickThread() {
 			select {
 			case <-ft.stop:
 				// Initialize the tick channel with zero ticks
-				ft.ticks = []time.Time{}
-				ft.tickChanReady.Broadcast()
+				// so calling `select` statements with `default`
+				// conditions can bail.
+				ft.nextTicks <- []time.Time{}
 				return
 			case <-next:
 
@@ -84,20 +71,18 @@ func (ft *fakeTicker) runTickThread() {
 				// time and reset the tick thread. Send ticks
 				// to the internal channel until we're past the
 				// current time of the fake clock
-				ft.ticks = []time.Time{}
+				ticks := []time.Time{}
 				for !nextTick.After(now) {
-					ft.ticks = append(ft.ticks, nextTick)
+					ticks = append(ticks, nextTick)
 					nextTick = nextTick.Add(ft.period)
 				}
-
 				// Figure out how long between now and the next
 				// scheduled tick, then wait that long.
 				remaining := nextTick.Sub(ft.clock.Now())
 				next = ft.clock.After(remaining)
 
-				// Indicate that the tick channel is ready for
-				// receivers
-				ft.tickChanReady.Broadcast()
+				ft.nextTicks <- ticks
+
 			}
 		}
 	}()
