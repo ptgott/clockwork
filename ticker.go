@@ -21,7 +21,7 @@ func (rt *realTicker) Chan() <-chan time.Time {
 
 type fakeTicker struct {
 	// Used for blocking access to the tick channel until there are ticks
-	// ready to be queued.
+	// ready to be queued. Indended to be unbuffered.
 	nextTicks chan []time.Time
 	stop      chan bool
 	clock     FakeClock
