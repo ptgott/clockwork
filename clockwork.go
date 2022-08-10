@@ -1,6 +1,7 @@
 package clockwork
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -185,20 +186,26 @@ func (fc *fakeClock) NewTimer(d time.Duration) Timer {
 // Advance advances fakeClock to a new point in time, ensuring channels from any
 // previous invocations of After are notified appropriately before returning
 func (fc *fakeClock) Advance(d time.Duration) {
+	fmt.Println("TICKTEST: Advance: locking fc.l")
 	fc.l.Lock()
 	defer fc.l.Unlock()
+	fmt.Println("TICKTEST: Advance: calling fc.time.Add")
 	end := fc.time.Add(d)
 	var newSleepers []*sleeper
 	for _, s := range fc.sleepers {
 		if end.Sub(s.until) >= 0 {
+			fmt.Println("TICKTEST: Advance: sending end to a sleeper's done channel")
 			s.done <- end
 		} else {
+			fmt.Println("TICKTEST: Advance: appending a new sleeper")
 			newSleepers = append(newSleepers, s)
 		}
 	}
 	fc.sleepers = newSleepers
+	fmt.Println("TICKTEST: Advance: calling notifyBlockers")
 	fc.blockers = notifyBlockers(fc.blockers, len(fc.sleepers))
 	fc.time = end
+	fmt.Println("TICKTEST: Advance: end of the function. About to unlock fc.l")
 }
 
 // BlockUntil will block until the fakeClock has the given number of sleepers
