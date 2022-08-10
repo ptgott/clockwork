@@ -1,6 +1,7 @@
 package clockwork
 
 import (
+	"fmt"
 	"testing"
 	"testing/quick"
 	"time"
@@ -100,8 +101,10 @@ func TestFakeTickerMultipleTicks(t *testing.T) {
 		for {
 			select {
 			case <-k.Chan():
+				fmt.Println("TICKTEST incrementing i")
 				i++
 			case <-s:
+				fmt.Println("TICKTEST sending the final tally")
 				r <- i
 			}
 		}
@@ -116,11 +119,16 @@ func TestFakeTickerMultipleTicks(t *testing.T) {
 	// still allowing for an arbitrarily large number.
 	if err := quick.Check(func(n uint8) bool {
 		fc := NewFakeClock()
+		fmt.Println("TICKTEST just created a fake clock")
 		tk := fc.NewTicker(time.Duration(1) * time.Millisecond)
 		s := make(chan struct{})
 		r := make(chan int)
+		fmt.Println("TICKTEST initializing the channel receiver goroutine")
 		go f(tk, s, r)
+		fmt.Println("TICKTEST calling Advance")
 		fc.Advance(time.Duration(n) * time.Millisecond)
+		fc.BlockUntil(1)
+		fmt.Println("TICKTEST sending a struct to the stop channel")
 		s <- struct{}{}
 		a = <-r
 		if a != int(n) {

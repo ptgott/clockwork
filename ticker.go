@@ -1,6 +1,7 @@
 package clockwork
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -35,14 +36,22 @@ type fakeTicker struct {
 // If there are no ticks to send, the returned channel will be unbuffered
 // with no senders.
 func (ft *fakeTicker) Chan() <-chan time.Time {
-	ticks := <-ft.nextTicks
+	fmt.Println("TICKTEST: about to receive from nextTicks")
+	select {
+	case ticks := <-ft.nextTicks:
+		fmt.Println("TICKTEST: just received from nextTicks")
 
-	c := make(chan time.Time, len(ticks))
+		c := make(chan time.Time, len(ticks))
 
-	for _, r := range ticks {
-		c <- r
+		for _, r := range ticks {
+			c <- r
+		}
+		fmt.Println("TICKTEST: returning a channel from Chan")
+		return c
+	default:
+		return nil
 	}
-	return c
+
 }
 
 func (ft *fakeTicker) Stop() {
@@ -54,16 +63,19 @@ func (ft *fakeTicker) Stop() {
 func (ft *fakeTicker) runTickThread() {
 	nextTick := ft.clock.Now().Add(ft.period)
 	next := ft.clock.After(ft.period)
+	fmt.Println("TICKTEST: just called After. Initializing the tick thread goroutine")
 	go func() {
 		for {
 			select {
 			case <-ft.stop:
+				fmt.Println("TICKTEST: received from the stop channel")
 				// Initialize the tick channel with zero ticks
 				// so calling `select` statements with `default`
 				// conditions can bail.
 				ft.nextTicks <- []time.Time{}
 				return
 			case <-next:
+				fmt.Println("TICKTEST: received from the next channel")
 
 				now := ft.clock.Now()
 				// We've advanced the fake clock, so round up
@@ -76,10 +88,13 @@ func (ft *fakeTicker) runTickThread() {
 					ticks = append(ticks, nextTick)
 					nextTick = nextTick.Add(ft.period)
 				}
+				fmt.Println("TICKTEST: finished creating a slice of ticks to send")
 				// Figure out how long between now and the next
 				// scheduled tick, then wait that long.
 				remaining := nextTick.Sub(ft.clock.Now())
+				fmt.Println("TICKTEST: reassigning next to After")
 				next = ft.clock.After(remaining)
+				fmt.Println("TICKTEST: about to send to nextTicks")
 
 				ft.nextTicks <- ticks
 
