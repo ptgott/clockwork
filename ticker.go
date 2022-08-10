@@ -36,20 +36,20 @@ type fakeTicker struct {
 // If there are no ticks to send, the returned channel will be unbuffered
 // with no senders.
 func (ft *fakeTicker) Chan() <-chan time.Time {
-	fmt.Println("TICKTEST: Chan(): about to enter the select block")
+	fmt.Println(time.Now(), "TICKTEST: Chan(): about to enter the select block")
 	select {
 	case ticks := <-ft.nextTicks:
-		fmt.Println("TICKTEST: Chan(): just received from nextTicks")
+		fmt.Println(time.Now(), "TICKTEST: Chan(): just received from nextTicks")
 
 		c := make(chan time.Time, len(ticks))
 
 		for _, r := range ticks {
 			c <- r
 		}
-		fmt.Println("TICKTEST: Chan(): returning a buffered channel")
+		fmt.Println(time.Now(), "TICKTEST: Chan(): returning a buffered channel")
 		return c
 	default:
-		fmt.Println("TICKTEST: Chan(): about to return nil from the default statement")
+		fmt.Println(time.Now(), "TICKTEST: Chan(): about to return nil from the default statement")
 		return nil
 	}
 
@@ -64,19 +64,19 @@ func (ft *fakeTicker) Stop() {
 func (ft *fakeTicker) runTickThread() {
 	nextTick := ft.clock.Now().Add(ft.period)
 	next := ft.clock.After(ft.period)
-	fmt.Println("TICKTEST: runTickThread: just called After. Initializing the tick thread goroutine")
+	fmt.Println(time.Now(), "TICKTEST: runTickThread: just called After. Initializing the tick thread goroutine")
 	go func() {
 		for {
 			select {
 			case <-ft.stop:
-				fmt.Println("TICKTEST: runTickThread: received from the stop channel")
+				fmt.Println(time.Now(), "TICKTEST: runTickThread: received from the stop channel")
 				// Initialize the tick channel with zero ticks
 				// so calling `select` statements with `default`
 				// conditions can bail.
 				ft.nextTicks <- []time.Time{}
 				return
 			case <-next:
-				fmt.Println("TICKTEST: runTickThread: received from the next channel")
+				fmt.Println(time.Now(), "TICKTEST: runTickThread: received from the next channel")
 
 				now := ft.clock.Now()
 				// We've advanced the fake clock, so round up
@@ -89,13 +89,13 @@ func (ft *fakeTicker) runTickThread() {
 					ticks = append(ticks, nextTick)
 					nextTick = nextTick.Add(ft.period)
 				}
-				fmt.Println("TICKTEST: runTickThread: finished creating a slice of ticks to send")
+				fmt.Println(time.Now(), "TICKTEST: runTickThread: finished creating a slice of ticks to send")
 				// Figure out how long between now and the next
 				// scheduled tick, then wait that long.
 				remaining := nextTick.Sub(ft.clock.Now())
-				fmt.Println("TICKTEST: runTickThread: reassigning next to After")
+				fmt.Println(time.Now(), "TICKTEST: runTickThread: reassigning next to After")
 				next = ft.clock.After(remaining)
-				fmt.Println("TICKTEST: runTickThread: about to send to nextTicks")
+				fmt.Println(time.Now(), "TICKTEST: runTickThread: about to send to nextTicks")
 
 				ft.nextTicks <- ticks
 
