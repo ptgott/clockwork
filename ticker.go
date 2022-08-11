@@ -1,7 +1,9 @@
 package clockwork
 
 import (
+	"errors"
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -21,31 +23,44 @@ func (rt *realTicker) Chan() <-chan time.Time {
 }
 
 type fakeTicker struct {
-	// Used for blocking access to the tick channel until there are ticks
-	// ready to be queued. Indended to have a buffer of 1 so sends do not
-	// block.
-	nextTicks chan []time.Time
+	// Queue of ticks to send. Must be accessed via SendTick and GetTick.
+	nextTicks []time.Time
+	mu        *sync.RWMutex
 	stop      chan bool
 	clock     FakeClock
 	period    time.Duration
 }
 
-// Chan retrieves the fakeTicker's tick channel. The channel is lazily
-// initialized and buffered to hold all of the ticks that elapsed while
-// advancing the fake clock.
-//
-// If there are no ticks to send, the returned channel will be unbuffered
-// with no senders.
-func (ft *fakeTicker) Chan() <-chan time.Time {
-	ticks := <-ft.nextTicks
-	fmt.Println(time.Now(), "TICKTEST: Chan(): just received from nextTicks")
+// SendTick adds a tick to the fake ticker's tick queue
+func (ft *fakeTicker) SendTick(k []time.Time) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.nextTicks = append(ft.nextTicks, k...)
+}
 
-	c := make(chan time.Time, len(ticks))
-
-	for _, r := range ticks {
-		c <- r
+// GetTick returns the next tick from the tick queue or, if there are none
+// available, an error.
+func (ft *fakeTicker) GetTick() (time.Time, error) {
+	ft.mu.RLock()
+	defer ft.mu.RUnlock()
+	if len(ft.nextTicks) == 0 {
+		return time.Now(), errors.New("there are no ticks remaining in the queue")
 	}
-	fmt.Println(time.Now(), "TICKTEST: Chan(): returning a buffered channel")
+	n := ft.nextTicks[0]
+	ft.nextTicks = ft.nextTicks[1:]
+	return n, nil
+}
+
+// Chan retrieves the fakeTicker's tick channel, which is always one-buffered
+// and contains the latest tick. Callers must always access the tick channel by
+// calling Chan, as the channel is replaced with each call.
+func (ft *fakeTicker) Chan() <-chan time.Time {
+	c := make(chan time.Time, 1)
+	m, err := ft.GetTick()
+	if err == nil {
+		c <- m
+	}
+
 	return c
 
 }
@@ -64,11 +79,6 @@ func (ft *fakeTicker) runTickThread() {
 		for {
 			select {
 			case <-ft.stop:
-				fmt.Println(time.Now(), "TICKTEST: runTickThread: received from the stop channel")
-				// Initialize the tick channel with zero ticks
-				// so calling `select` statements with `default`
-				// conditions can bail.
-				ft.nextTicks <- []time.Time{}
 				return
 			case <-next:
 				fmt.Println(time.Now(), "TICKTEST: runTickThread: received from the next channel")
@@ -84,6 +94,7 @@ func (ft *fakeTicker) runTickThread() {
 					ticks = append(ticks, nextTick)
 					nextTick = nextTick.Add(ft.period)
 				}
+
 				fmt.Println(time.Now(), "TICKTEST: runTickThread: finished creating a slice of ticks to send")
 				// Figure out how long between now and the next
 				// scheduled tick, then wait that long.
@@ -91,8 +102,7 @@ func (ft *fakeTicker) runTickThread() {
 				fmt.Println(time.Now(), "TICKTEST: runTickThread: reassigning next to After")
 				next = ft.clock.After(remaining)
 				fmt.Println(time.Now(), "TICKTEST: runTickThread: about to send to nextTicks")
-
-				ft.nextTicks <- ticks
+				ft.SendTick(ticks)
 
 			}
 		}
