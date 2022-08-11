@@ -19,6 +19,17 @@ func TestFakeTickerStop(t *testing.T) {
 	}
 }
 
+func TestFakeTickerStopWithConcurrentChan(t *testing.T) {
+	fc := NewFakeClock()
+	ft := fc.NewTicker(1)
+
+	go func(k Ticker) {
+		<-k.Chan()
+	}(ft)
+	// Calling Chan in the goroutine should not block calling Stop here.
+	ft.Stop()
+}
+
 func TestFakeTickerTick(t *testing.T) {
 	fc := &fakeClock{}
 	now := fc.Now()
@@ -88,6 +99,19 @@ func TestFakeTicker_Race2(t *testing.T) {
 		<-ft.Chan()
 	}
 	ft.Stop()
+}
+
+func TestFakeTickerAdvance(t *testing.T) {
+	fc := NewFakeClock()
+	ft := fc.NewTicker(1)
+	fc.Advance(2)
+	ft1 := <-ft.Chan()
+	// There is still one tick to go
+	ft2 := <-ft.Chan()
+	if !ft2.After(ft1) {
+		t.Fatal("expecting to receive a second tick that is later than the first")
+	}
+
 }
 
 // Issue 30

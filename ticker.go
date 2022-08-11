@@ -22,7 +22,8 @@ func (rt *realTicker) Chan() <-chan time.Time {
 
 type fakeTicker struct {
 	// Used for blocking access to the tick channel until there are ticks
-	// ready to be queued. Indended to be unbuffered.
+	// ready to be queued. Indended to have a buffer of 1 so sends do not
+	// block.
 	nextTicks chan []time.Time
 	stop      chan bool
 	clock     FakeClock
@@ -36,22 +37,16 @@ type fakeTicker struct {
 // If there are no ticks to send, the returned channel will be unbuffered
 // with no senders.
 func (ft *fakeTicker) Chan() <-chan time.Time {
-	fmt.Println(time.Now(), "TICKTEST: Chan(): about to enter the select block")
-	select {
-	case ticks := <-ft.nextTicks:
-		fmt.Println(time.Now(), "TICKTEST: Chan(): just received from nextTicks")
+	ticks := <-ft.nextTicks
+	fmt.Println(time.Now(), "TICKTEST: Chan(): just received from nextTicks")
 
-		c := make(chan time.Time, len(ticks))
+	c := make(chan time.Time, len(ticks))
 
-		for _, r := range ticks {
-			c <- r
-		}
-		fmt.Println(time.Now(), "TICKTEST: Chan(): returning a buffered channel")
-		return c
-	default:
-		fmt.Println(time.Now(), "TICKTEST: Chan(): about to return nil from the default statement")
-		return nil
+	for _, r := range ticks {
+		c <- r
 	}
+	fmt.Println(time.Now(), "TICKTEST: Chan(): returning a buffered channel")
+	return c
 
 }
 
