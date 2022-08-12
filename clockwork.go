@@ -156,7 +156,7 @@ func (fc *fakeClock) Since(t time.Time) time.Duration {
 func (fc *fakeClock) NewTicker(d time.Duration) Ticker {
 	ft := &fakeTicker{
 		nextTicks: []time.Time{},
-		mu:        &sync.RWMutex{},
+		mu:        &sync.Mutex{},
 		stop:      make(chan bool, 1),
 		clock:     fc,
 		period:    d,

@@ -105,11 +105,18 @@ func TestFakeTickerAdvance(t *testing.T) {
 	fc := NewFakeClock()
 	ft := fc.NewTicker(1)
 	fc.Advance(2)
+	fc.BlockUntil(1)
 	ft1 := <-ft.Chan()
 	// There is still one tick to go
 	ft2 := <-ft.Chan()
 	if !ft2.After(ft1) {
 		t.Fatal("expecting to receive a second tick that is later than the first")
+	}
+	select {
+	case <-ft.Chan():
+		t.Fatal("unexpected tick received from the fake ticker channel")
+	default:
+
 	}
 
 }

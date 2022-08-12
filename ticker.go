@@ -25,7 +25,7 @@ func (rt *realTicker) Chan() <-chan time.Time {
 type fakeTicker struct {
 	// Queue of ticks to send. Must be accessed via SendTick and GetTick.
 	nextTicks []time.Time
-	mu        *sync.RWMutex
+	mu        *sync.Mutex
 	stop      chan bool
 	clock     FakeClock
 	period    time.Duration
@@ -35,17 +35,21 @@ type fakeTicker struct {
 func (ft *fakeTicker) SendTick(k []time.Time) {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
+	fmt.Println("TICKTEST; SendTick: appending to nextTicks")
 	ft.nextTicks = append(ft.nextTicks, k...)
 }
 
 // GetTick returns the next tick from the tick queue or, if there are none
 // available, an error.
 func (ft *fakeTicker) GetTick() (time.Time, error) {
-	ft.mu.RLock()
-	defer ft.mu.RUnlock()
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	fmt.Println("TICKTEST: GetTick: getting the next tick")
 	if len(ft.nextTicks) == 0 {
+		fmt.Println("TICKTEST: GetTick: returning an error")
 		return time.Now(), errors.New("there are no ticks remaining in the queue")
 	}
+	fmt.Println("TICKTEST: GetTick: Retrieving the first tick")
 	n := ft.nextTicks[0]
 	ft.nextTicks = ft.nextTicks[1:]
 	return n, nil
@@ -55,12 +59,15 @@ func (ft *fakeTicker) GetTick() (time.Time, error) {
 // and contains the latest tick. Callers must always access the tick channel by
 // calling Chan, as the channel is replaced with each call.
 func (ft *fakeTicker) Chan() <-chan time.Time {
+	fmt.Println("TICKTEST: Chan: at the top of the function")
 	c := make(chan time.Time, 1)
 	m, err := ft.GetTick()
+	fmt.Println("TICKTEST: Chan: just called GetTick")
 	if err == nil {
 		c <- m
+		fmt.Println("TICKTEST: Chan: just sent to the channel to return")
 	}
-
+	fmt.Println("TICKTEST: Chan: returning a channel")
 	return c
 
 }
@@ -103,6 +110,7 @@ func (ft *fakeTicker) runTickThread() {
 				next = ft.clock.After(remaining)
 				fmt.Println(time.Now(), "TICKTEST: runTickThread: about to send to nextTicks")
 				ft.SendTick(ticks)
+				fmt.Println("TICKTEST: runTickThread: just returned from SendTicks")
 
 			}
 		}
