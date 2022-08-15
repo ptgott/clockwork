@@ -79,6 +79,7 @@ func TestFakeTicker_Race(t *testing.T) {
 	defer ticker.Stop()
 
 	fc.Advance(tickTime)
+	fc.BlockUntil(1)
 
 	timeout := time.NewTimer(500 * time.Millisecond)
 	defer timeout.Stop()
@@ -96,6 +97,7 @@ func TestFakeTicker_Race2(t *testing.T) {
 	ft := fc.NewTicker(5 * time.Second)
 	for i := 0; i < 100; i++ {
 		fc.Advance(5 * time.Second)
+		fc.BlockUntil(1)
 		<-ft.Chan()
 	}
 	ft.Stop()
