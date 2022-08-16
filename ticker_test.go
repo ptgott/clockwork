@@ -158,11 +158,13 @@ func TestFakeTickerMultipleTicks(t *testing.T) {
 		r := make(chan int)
 		fmt.Println(time.Now(), "TICKTEST quickcheck function: initializing the channel receiver goroutine")
 		go f(tk, s, r)
+		go func(c Clock, s chan struct{}) {
+			c.Sleep(time.Duration(n) * time.Millisecond)
+			fmt.Println(time.Now(), "TICKTEST quickcheck function: sending a struct to the stop channel")
+			s <- struct{}{}
+		}(fc, s)
 		fmt.Println(time.Now(), "TICKTEST quickcheck function: calling Advance")
 		fc.Advance(time.Duration(n) * time.Millisecond)
-		fc.BlockUntil(1)
-		fmt.Println(time.Now(), "TICKTEST quickcheck function: sending a struct to the stop channel")
-		s <- struct{}{}
 		a = <-r
 		fmt.Println(time.Now(), "TICKTEST quickcheck function: receiving r from the ticker-checking goroutine")
 		if a != int(n) {
