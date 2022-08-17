@@ -2,6 +2,7 @@ package clockwork
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"testing/quick"
 	"time"
@@ -121,6 +122,39 @@ func TestFakeTickerAdvance(t *testing.T) {
 
 	}
 
+}
+
+// This is the same as TestMyFunc in example_test.go, but includes a fakeTicker
+func TestFakeTickerDuringSleep(t *testing.T) {
+
+	myFunc := func(clock Clock, i *int) {
+		clock.Sleep(3 * time.Second)
+		*i += 1
+	}
+
+	assertState := func(t *testing.T, i, j int) {
+		if i != j {
+			t.Fatalf("i %d, j %d", i, j)
+		}
+	}
+
+	var i int
+	c := NewFakeClock()
+	ft := c.NewTicker(1 * time.Minute)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		myFunc(c, &i)
+		wg.Done()
+	}()
+
+	c.BlockUntil(1)
+	assertState(t, i, 0)
+	c.Advance(1 * time.Hour)
+	<-ft.Chan()
+	wg.Wait()
+	assertState(t, i, 1)
 }
 
 // Issue 30
