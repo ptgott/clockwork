@@ -60,13 +60,20 @@ func (ft *fakeTicker) GetTick() (time.Time, error) {
 // calling Chan, as the channel is replaced with each call.
 func (ft *fakeTicker) Chan() <-chan time.Time {
 	fmt.Println("TICKTEST: Chan: at the top of the function")
+	ft.mu.Lock()
 	c := make(chan time.Time, 1)
-	m, err := ft.GetTick()
-	fmt.Println("TICKTEST: Chan: just called GetTick")
-	if err == nil {
-		c <- m
-		fmt.Println("TICKTEST: Chan: just sent to the channel to return")
+	defer ft.mu.Unlock()
+	fmt.Println("TICKTEST: GetTick: getting the next tick")
+	if len(ft.nextTicks) == 0 {
+		fmt.Println("TICKTEST: Chan: returning empty channel")
+		return c
 	}
+	fmt.Println("TICKTEST: GetTick: Retrieving the first tick")
+	m := ft.nextTicks[0]
+	ft.nextTicks = ft.nextTicks[1:]
+	fmt.Println("TICKTEST: Chan: just called GetTick")
+	c <- m
+	fmt.Println("TICKTEST: Chan: just sent to the channel to return")
 	fmt.Println("TICKTEST: Chan: returning a channel")
 	return c
 
@@ -88,6 +95,7 @@ func (ft *fakeTicker) runTickThread() {
 			case <-ft.stop:
 				return
 			case <-next:
+				ft.mu.Lock()
 				fmt.Println(time.Now(), "TICKTEST: runTickThread: received from the next channel")
 
 				now := ft.clock.Now()
@@ -109,9 +117,9 @@ func (ft *fakeTicker) runTickThread() {
 				fmt.Println(time.Now(), "TICKTEST: runTickThread: reassigning next to After")
 				next = ft.clock.After(remaining)
 				fmt.Println(time.Now(), "TICKTEST: runTickThread: about to send to nextTicks")
-				ft.SendTick(ticks)
+				ft.nextTicks = append(ft.nextTicks, ticks...)
 				fmt.Println("TICKTEST: runTickThread: just returned from SendTicks")
-
+				ft.mu.Unlock()
 			}
 		}
 	}()
