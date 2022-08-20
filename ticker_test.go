@@ -149,10 +149,15 @@ func TestFakeTickerDuringSleep(t *testing.T) {
 		wg.Done()
 	}()
 
-	c.BlockUntil(1)
+	// Wait for the fake ticker and Sleep call to subscribe to notifications from
+	// the fake clock
+	c.BlockUntil(2)
 	assertState(t, i, 0)
 	c.Advance(1 * time.Hour)
+	// Wait for the fake ticker to reset
+	c.BlockUntil(1)
 	<-ft.Chan()
+	fmt.Println("TICKTEST: test: received from Chan")
 	wg.Wait()
 	assertState(t, i, 1)
 }
