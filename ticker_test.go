@@ -202,8 +202,10 @@ func TestFakeTickerMultipleTicks(t *testing.T) {
 			fmt.Println(time.Now(), "TICKTEST quickcheck function: sending a struct to the stop channel")
 			s <- struct{}{}
 		}(fc, s)
+		fc.BlockUntil(2)
 		fmt.Println(time.Now(), "TICKTEST quickcheck function: calling Advance")
 		fc.Advance(time.Duration(n) * time.Millisecond)
+		fc.BlockUntil(1)
 		a = <-r
 		fmt.Println(time.Now(), "TICKTEST quickcheck function: receiving r from the ticker-checking goroutine")
 		if a != int(n) {
