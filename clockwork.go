@@ -84,10 +84,18 @@ type fakeClock struct {
 	l sync.RWMutex
 }
 
+type sleeperKind int
+
+const (
+	oneShotSleeper sleeperKind = iota
+	repeatingSleeper
+)
+
 // sleeper represents a caller of After or Sleep
 type sleeper struct {
 	until time.Time
 	done  chan time.Time
+	kind  sleeperKind
 }
 
 // blocker represents a caller of BlockUntil
@@ -111,6 +119,37 @@ func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
 		s := &sleeper{
 			until: now.Add(d),
 			done:  done,
+			kind:  oneShotSleeper,
+		}
+		fc.sleepers = append(fc.sleepers, s)
+		// and notify any blockers
+		fc.blockers = notifyBlockers(fc.blockers, len(fc.sleepers))
+	}
+	return done
+}
+
+// runTicker adds a repeating sleeper to fc, which the fakeClock refreshes once
+// it has reached its until time. addRepeatingSleeper has the same interface for
+// callers as *fakeClock.After. The returned time.Time channel receives whenever
+// a new period of the repeating sleeper elapses.
+//
+// Like time.NewTicker, addRepeatingSleeper will panic if d is less than or
+// equal to zero.
+func (fc *fakeClock) addRepeatingSleeper(d time.Duration) <-chan time.Time {
+	fc.l.Lock()
+	defer fc.l.Unlock()
+	now := fc.time
+	done := make(chan time.Time, 1)
+	if d.Nanoseconds() <= 0 {
+		panic(
+			"the duration of the repeating sleeper must be greater than zero",
+		)
+	} else {
+		// otherwise, add to the set of sleepers
+		s := &sleeper{
+			until: now.Add(d),
+			done:  done,
+			kind:  repeatingSleeper,
 		}
 		fc.sleepers = append(fc.sleepers, s)
 		// and notify any blockers
