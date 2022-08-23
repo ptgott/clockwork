@@ -77,7 +77,8 @@ func (rc *realClock) NewTimer(d time.Duration) Timer {
 }
 
 type fakeClock struct {
-	sleepers []*sleeper
+	// A linked list of sleepers sorted so that the head's until is earliest
+	sleepers *sleeper
 	blockers []*blocker
 	time     time.Time
 
@@ -91,11 +92,14 @@ const (
 	repeatingSleeper
 )
 
-// sleeper represents a caller of After or Sleep
+// sleeper represents a caller of After. The fake clock sends a time.Time to its
+// done channel after advancing past its until time. When one sleeper is
+// finished, it is possible to access the next sleeper via its next property.
 type sleeper struct {
 	until time.Time
 	done  chan time.Time
 	kind  sleeperKind
+	next  *sleeper
 }
 
 // blocker represents a caller of BlockUntil
@@ -115,15 +119,27 @@ func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
 		// special case - trigger immediately
 		done <- now
 	} else {
+		var n int
 		// otherwise, add to the set of sleepers
 		s := &sleeper{
 			until: now.Add(d),
 			done:  done,
 			kind:  oneShotSleeper,
 		}
-		fc.sleepers = append(fc.sleepers, s)
+		// Find the first sleeper that s comes after and insert s after
+		// it. Reassign the next sleeper to after s if necessary. Also
+		// count all sleepers.
+		for l := fc.sleepers; l != nil && l.next != nil; l = l.next {
+			if s.next == nil && s.until.After(l.until) {
+				if l.next != nil {
+					s.next = l.next
+				}
+				l.next = s
+			}
+			n++
+		}
 		// and notify any blockers
-		fc.blockers = notifyBlockers(fc.blockers, len(fc.sleepers))
+		fc.blockers = notifyBlockers(fc.blockers, n)
 	}
 	return done
 }
@@ -145,15 +161,26 @@ func (fc *fakeClock) addRepeatingSleeper(d time.Duration) <-chan time.Time {
 			"the duration of the repeating sleeper must be greater than zero",
 		)
 	} else {
-		// otherwise, add to the set of sleepers
+		var n int
 		s := &sleeper{
 			until: now.Add(d),
 			done:  done,
 			kind:  repeatingSleeper,
 		}
-		fc.sleepers = append(fc.sleepers, s)
+		// Find the first sleeper that s comes after and insert s after
+		// it. Reassign the next sleeper to after s if necessary. Also
+		// count all sleepers.
+		for l := fc.sleepers; l != nil && l.next != nil; l = l.next {
+			if s.next == nil && s.until.After(l.until) {
+				if l.next != nil {
+					s.next = l.next
+				}
+				l.next = s
+			}
+			n++
+		}
 		// and notify any blockers
-		fc.blockers = notifyBlockers(fc.blockers, len(fc.sleepers))
+		fc.blockers = notifyBlockers(fc.blockers, n)
 	}
 	return done
 }
@@ -231,19 +258,24 @@ func (fc *fakeClock) Advance(d time.Duration) {
 	defer fc.l.Unlock()
 	fmt.Println(time.Now(), "TICKTEST: Advance: calling fc.time.Add")
 	end := fc.time.Add(d)
-	var newSleepers []*sleeper
-	for _, s := range fc.sleepers {
-		if end.Sub(s.until) >= 0 {
-			fmt.Println(time.Now(), "TICKTEST: Advance: sending end to a sleeper's done channel")
-			s.done <- end
-		} else {
-			fmt.Println(time.Now(), "TICKTEST: Advance: appending a new sleeper")
-			newSleepers = append(newSleepers, s)
+	// Notify all sleepers that have elapsed. Reassign the fake clock's
+	// sleepers to those that have not elapsed.
+	for s := fc.sleepers; s != nil && s.next != nil; s = s.next {
+		if s.until.After(end) {
+			fc.sleepers = s
+			break
 		}
+		fmt.Println(time.Now(), "TICKTEST: Advance: sending end to a sleeper's done channel")
+		// This sleeper has elapsed, so notify it.
+		s.done <- end
 	}
-	fc.sleepers = newSleepers
+	var n int
+	// Count the unelapsed sleepers
+	for s := fc.sleepers; s != nil && s.next != nil; s = s.next {
+		n++
+	}
 	fmt.Println(time.Now(), "TICKTEST: Advance: calling notifyBlockers")
-	fc.blockers = notifyBlockers(fc.blockers, len(fc.sleepers))
+	fc.blockers = notifyBlockers(fc.blockers, n)
 	fc.time = end
 	fmt.Println(time.Now(), "TICKTEST: Advance: end of the function. About to unlock fc.l")
 }
@@ -252,8 +284,13 @@ func (fc *fakeClock) Advance(d time.Duration) {
 // (callers of Sleep or After)
 func (fc *fakeClock) BlockUntil(n int) {
 	fc.l.Lock()
+	var p int
+	// Count the sleepers
+	for s := fc.sleepers; s != nil && s.next != nil; s = s.next {
+		p++
+	}
 	// Fast path: we already have >= n sleepers.
-	if len(fc.sleepers) >= n {
+	if p >= n {
 		fc.l.Unlock()
 		return
 	}
