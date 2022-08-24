@@ -129,14 +129,18 @@ func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
 		// Find the first sleeper that s comes after and insert s after
 		// it. Reassign the next sleeper to after s if necessary. Also
 		// count all sleepers.
-		for l := fc.sleepers; l != nil && l.next != nil; l = l.next {
-			if s.next == nil && s.until.After(l.until) {
+		for l := fc.sleepers; l != nil; l = l.next {
+			if s.until.After(l.until) {
 				if l.next != nil {
 					s.next = l.next
 				}
 				l.next = s
 			}
 			n++
+		}
+
+		if fc.sleepers == nil {
+			fc.sleepers = s
 		}
 		// and notify any blockers
 		fc.blockers = notifyBlockers(fc.blockers, n)
@@ -170,7 +174,7 @@ func (fc *fakeClock) addRepeatingSleeper(d time.Duration) <-chan time.Time {
 		// Find the first sleeper that s comes after and insert s after
 		// it. Reassign the next sleeper to after s if necessary. Also
 		// count all sleepers.
-		for l := fc.sleepers; l != nil && l.next != nil; l = l.next {
+		for l := fc.sleepers; l != nil; l = l.next {
 			if s.next == nil && s.until.After(l.until) {
 				if l.next != nil {
 					s.next = l.next
@@ -178,6 +182,10 @@ func (fc *fakeClock) addRepeatingSleeper(d time.Duration) <-chan time.Time {
 				l.next = s
 			}
 			n++
+		}
+
+		if fc.sleepers == nil {
+			fc.sleepers = s
 		}
 		// and notify any blockers
 		fc.blockers = notifyBlockers(fc.blockers, n)
@@ -260,7 +268,7 @@ func (fc *fakeClock) Advance(d time.Duration) {
 	end := fc.time.Add(d)
 	// Notify all sleepers that have elapsed. Reassign the fake clock's
 	// sleepers to those that have not elapsed.
-	for s := fc.sleepers; s != nil && s.next != nil; s = s.next {
+	for s := fc.sleepers; s != nil; s = s.next {
 		if s.until.After(end) {
 			fc.sleepers = s
 			break
@@ -271,7 +279,7 @@ func (fc *fakeClock) Advance(d time.Duration) {
 	}
 	var n int
 	// Count the unelapsed sleepers
-	for s := fc.sleepers; s != nil && s.next != nil; s = s.next {
+	for s := fc.sleepers; s != nil; s = s.next {
 		n++
 	}
 	fmt.Println(time.Now(), "TICKTEST: Advance: calling notifyBlockers")
@@ -286,7 +294,7 @@ func (fc *fakeClock) BlockUntil(n int) {
 	fc.l.Lock()
 	var p int
 	// Count the sleepers
-	for s := fc.sleepers; s != nil && s.next != nil; s = s.next {
+	for s := fc.sleepers; s != nil; s = s.next {
 		p++
 	}
 	// Fast path: we already have >= n sleepers.
