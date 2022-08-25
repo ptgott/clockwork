@@ -126,17 +126,18 @@ func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
 			done:  done,
 			kind:  oneShotSleeper,
 		}
-		// Find the first sleeper that s comes after and insert s after
-		// it. Reassign the next sleeper to after s if necessary. Also
-		// count all sleepers.
+		// Order the sleepers by their until field, smallest to largest.
+		// Reassign the next sleeper to after s if necessary. Also count
+		// all sleepers.
 		for l := fc.sleepers; l != nil; l = l.next {
-			if s.until.After(l.until) {
+			n++
+			if s.until.After(l.until) && (l.next == nil || l.next.until.After(s.until)) {
 				if l.next != nil {
 					s.next = l.next
 				}
 				l.next = s
+				break
 			}
-			n++
 		}
 
 		if fc.sleepers == nil {
@@ -171,17 +172,20 @@ func (fc *fakeClock) addRepeatingSleeper(d time.Duration) <-chan time.Time {
 			done:  done,
 			kind:  repeatingSleeper,
 		}
-		// Find the first sleeper that s comes after and insert s after
-		// it. Reassign the next sleeper to after s if necessary. Also
-		// count all sleepers.
+
+		// Order the sleepers by their until field, smallest to largest.
+		// Reassign the next sleeper to after s if necessary. Also count
+		// all sleepers.
 		for l := fc.sleepers; l != nil; l = l.next {
-			if s.next == nil && s.until.After(l.until) {
+			n++
+
+			if s.until.After(l.until) && (l.next == nil || l.next.until.After(s.until)) {
 				if l.next != nil {
 					s.next = l.next
 				}
 				l.next = s
+				break
 			}
-			n++
 		}
 
 		if fc.sleepers == nil {
