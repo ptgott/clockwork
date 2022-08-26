@@ -131,17 +131,20 @@ func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
 		// all sleepers.
 		for l := fc.sleepers; l != nil; l = l.next {
 			n++
-			if s.until.After(l.until) && (l.next == nil || l.next.until.After(s.until)) {
+			if (s.until.Equal(l.until) || s.until.After(l.until)) &&
+				(l.next == nil || l.next.until.After(s.until) || l.next.until.Equal(s.until)) {
 				if l.next != nil {
 					s.next = l.next
 				}
 				l.next = s
+				n++
 				break
 			}
 		}
 
 		if fc.sleepers == nil {
 			fc.sleepers = s
+			n++
 		}
 		// and notify any blockers
 		fc.blockers = notifyBlockers(fc.blockers, n)
@@ -149,10 +152,11 @@ func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
 	return done
 }
 
-// runTicker adds a repeating sleeper to fc, which the fakeClock refreshes once
-// it has reached its until time. addRepeatingSleeper has the same interface for
-// callers as *fakeClock.After. The returned time.Time channel receives whenever
-// a new period of the repeating sleeper elapses.
+// TODO: Before calling this, have it reuse the sleeper-adding logic from After.
+// addRepeatingSleeper  adds a repeating sleeper to fc, which the fakeClock
+// refreshes once it has reached its until time. addRepeatingSleeper has the
+// same interface for callers as *fakeClock.After. The returned time.Time
+// channel receives whenever a new period of the repeating sleeper elapses.
 //
 // Like time.NewTicker, addRepeatingSleeper will panic if d is less than or
 // equal to zero.
@@ -184,12 +188,14 @@ func (fc *fakeClock) addRepeatingSleeper(d time.Duration) <-chan time.Time {
 					s.next = l.next
 				}
 				l.next = s
+				n++
 				break
 			}
 		}
 
 		if fc.sleepers == nil {
 			fc.sleepers = s
+			n++
 		}
 		// and notify any blockers
 		fc.blockers = notifyBlockers(fc.blockers, n)
