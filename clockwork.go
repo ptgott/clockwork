@@ -100,6 +100,9 @@ type sleeper struct {
 	done  chan time.Time
 	kind  sleeperKind
 	next  *sleeper
+	// associate the sleepr with a ticker so we can remove the sleepr when
+	// we stop the ticker
+	ticker *fakeTicker
 }
 
 // blocker represents a caller of BlockUntil
@@ -111,6 +114,22 @@ type blocker struct {
 // After mimics time.After; it waits for the given duration to elapse on the
 // fakeClock, then sends the current time on the returned channel.
 func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
+	return fc.addSleeper(d, oneShotSleeper, nil)
+}
+
+// addRepeatingSleeper adds a sleeper that waits for the duration d to elapse,
+// then sends to the returned channel. The *fakeClock then refreshes the sleeper
+// with the same duration. Like time.NewTicker, this panics if d is not greater
+// than zero.
+func (fc *fakeClock) addRepeatingSleeper(d time.Duration, k *fakeTicker) {
+	if d.Nanoseconds() <= 0 {
+		panic("a repeating sleeper must have a positive, nonzero duration")
+	}
+	fc.addSleeper(d, repeatingSleeper, k)
+	return
+}
+
+func (fc *fakeClock) addSleeper(d time.Duration, kind sleeperKind, k *fakeTicker) <-chan time.Time {
 	fc.l.Lock()
 	defer fc.l.Unlock()
 	now := fc.time
@@ -122,9 +141,10 @@ func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
 		var n int
 		// otherwise, add to the set of sleepers
 		s := &sleeper{
-			until: now.Add(d),
-			done:  done,
-			kind:  oneShotSleeper,
+			until:  now.Add(d),
+			done:   done,
+			kind:   kind,
+			ticker: k,
 		}
 		// Order the sleepers by their until field, smallest to largest.
 		// Reassign the next sleeper to after s if necessary. Also count
@@ -150,57 +170,7 @@ func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
 		fc.blockers = notifyBlockers(fc.blockers, n)
 	}
 	return done
-}
 
-// TODO: Before calling this, have it reuse the sleeper-adding logic from After.
-// addRepeatingSleeper  adds a repeating sleeper to fc, which the fakeClock
-// refreshes once it has reached its until time. addRepeatingSleeper has the
-// same interface for callers as *fakeClock.After. The returned time.Time
-// channel receives whenever a new period of the repeating sleeper elapses.
-//
-// Like time.NewTicker, addRepeatingSleeper will panic if d is less than or
-// equal to zero.
-func (fc *fakeClock) addRepeatingSleeper(d time.Duration) <-chan time.Time {
-	fc.l.Lock()
-	defer fc.l.Unlock()
-	now := fc.time
-	done := make(chan time.Time, 1)
-	if d.Nanoseconds() <= 0 {
-		panic(
-			"the duration of the repeating sleeper must be greater than zero",
-		)
-	} else {
-		var n int
-		s := &sleeper{
-			until: now.Add(d),
-			done:  done,
-			kind:  repeatingSleeper,
-		}
-
-		// Order the sleepers by their until field, smallest to largest.
-		// Reassign the next sleeper to after s if necessary. Also count
-		// all sleepers.
-		for l := fc.sleepers; l != nil; l = l.next {
-			n++
-
-			if s.until.After(l.until) && (l.next == nil || l.next.until.After(s.until)) {
-				if l.next != nil {
-					s.next = l.next
-				}
-				l.next = s
-				n++
-				break
-			}
-		}
-
-		if fc.sleepers == nil {
-			fc.sleepers = s
-			n++
-		}
-		// and notify any blockers
-		fc.blockers = notifyBlockers(fc.blockers, n)
-	}
-	return done
 }
 
 // notifyBlockers notifies all the blockers waiting until the at least the given
