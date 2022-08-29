@@ -114,24 +114,30 @@ type blocker struct {
 // After mimics time.After; it waits for the given duration to elapse on the
 // fakeClock, then sends the current time on the returned channel.
 func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
+	fc.l.Lock()
+	defer fc.l.Unlock()
 	return fc.addSleeper(d, oneShotSleeper, nil)
 }
 
-// addRepeatingSleeper adds a sleeper that waits for the duration d to elapse,
-// then sends to the returned channel. The *fakeClock then refreshes the sleeper
-// with the same duration. Like time.NewTicker, this panics if d is not greater
-// than zero.
-func (fc *fakeClock) addRepeatingSleeper(d time.Duration, k *fakeTicker) {
-	if d.Nanoseconds() <= 0 {
+// addRepeatingSleeper adds a sleeper that waits for fakeTicker k's period  to
+// elapse, then sends to the returned channel. The *fakeClock then refreshes the
+// sleeper with the same duration. Like time.NewTicker, this panics if d is not
+// greater than zero.
+//
+// fc must be holding the lock on fc.l when calling addRepeatingSleeper.
+func (fc *fakeClock) addRepeatingSleeper(k *fakeTicker) {
+	if k.period.Nanoseconds() <= 0 {
 		panic("a repeating sleeper must have a positive, nonzero duration")
 	}
-	fc.addSleeper(d, repeatingSleeper, k)
+	fc.addSleeper(k.period, repeatingSleeper, k)
 	return
 }
 
+// addSleeper inserts a new sleeper into the fakeClock's list of sleepers,
+// ordered by soonest to least soon.
+//
+// fc must be holding the lock on fc.l when calling addRepeatingSleeper.
 func (fc *fakeClock) addSleeper(d time.Duration, kind sleeperKind, k *fakeTicker) <-chan time.Time {
-	fc.l.Lock()
-	defer fc.l.Unlock()
 	now := fc.time
 	done := make(chan time.Time, 1)
 	if d.Nanoseconds() <= 0 {
@@ -209,11 +215,10 @@ func (fc *fakeClock) Since(t time.Time) time.Duration {
 // Advance have moved the clock passed the given duration
 func (fc *fakeClock) NewTicker(d time.Duration) Ticker {
 	ft := &fakeTicker{
-		nextTicks: []time.Time{},
-		mu:        &sync.Mutex{},
-		stop:      make(chan bool, 1),
-		clock:     fc,
-		period:    d,
+		c:      make(chan time.Time, 1),
+		stop:   make(chan bool, 1),
+		clock:  fc,
+		period: d,
 	}
 	ft.runTickThread()
 	return ft
@@ -252,6 +257,9 @@ func (fc *fakeClock) Advance(d time.Duration) {
 		if s.until.After(end) {
 			fc.sleepers = s
 			break
+		}
+		if s.kind == repeatingSleeper {
+			fc.addRepeatingSleeper(s.ticker)
 		}
 		fmt.Println(time.Now(), "TICKTEST: Advance: sending end to a sleeper's done channel")
 		// This sleeper has elapsed, so notify it.
