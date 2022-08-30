@@ -98,7 +98,6 @@ func TestFakeTicker_Race2(t *testing.T) {
 	ft := fc.NewTicker(5 * time.Second)
 	for i := 0; i < 100; i++ {
 		fc.Advance(5 * time.Second)
-		fc.BlockUntil(1)
 		<-ft.Chan()
 	}
 	ft.Stop()

@@ -1,6 +1,7 @@
 package clockwork
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -46,6 +47,7 @@ func (ft *fakeTicker) runTickThread() {
 			case <-ft.stop:
 				return
 			case <-next:
+				fmt.Println("TICKTEST: runTickThread: received from next")
 				// We send the time that the tick was supposed to occur at.
 				tick := nextTick
 				// Before sending the tick, we'll compute the next tick time and star the clock.After call.
@@ -60,10 +62,13 @@ func (ft *fakeTicker) runTickThread() {
 				}
 				// Figure out how long between now and the next scheduled tick, then wait that long.
 				remaining := nextTick.Sub(now)
+				fmt.Println("TICKTEST: runTickThread: reassigning next")
 				next = ft.clock.After(remaining)
+				fmt.Println("TICKTEST: runTickThread: entering select block")
 				// Finally, we can actually send the tick.
 				select {
 				case ft.c <- tick:
+					fmt.Println("TICKTEST: runTickThread: sent to ft.c")
 				default:
 				}
 			}

@@ -261,7 +261,7 @@ func (fc *fakeClock) Advance(d time.Duration) {
 		if s.kind == repeatingSleeper {
 			fc.addRepeatingSleeper(s.ticker)
 		}
-		fmt.Println(time.Now(), "TICKTEST: Advance: sending end to a sleeper's done channel")
+		fmt.Println(time.Now(), "TICKTEST: Advance: sending end to a sleeper's done channel: ", s.done)
 		// This sleeper has elapsed, so notify it.
 		s.done <- end
 	}
