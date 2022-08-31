@@ -1,7 +1,6 @@
 package clockwork
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -39,38 +38,14 @@ func (ft *fakeTicker) Stop() {
 // after every period. Tick events are discarded if the underlying ticker channel does not have
 // enough capacity.
 func (ft *fakeTicker) runTickThread() {
-	nextTick := ft.clock.Now().Add(ft.period)
-	next := ft.clock.After(ft.period)
+	fc := ft.clock.(*fakeClock)
+	fc.addRepeatingSleeper(ft)
 	go func() {
 		for {
 			select {
 			case <-ft.stop:
+				fc.stopTicker(ft)
 				return
-			case <-next:
-				fmt.Println("TICKTEST: runTickThread: received from next")
-				// We send the time that the tick was supposed to occur at.
-				tick := nextTick
-				// Before sending the tick, we'll compute the next tick time and star the clock.After call.
-				now := ft.clock.Now()
-				// First, figure out how many periods there have been between "now" and the time we were
-				// supposed to have trigged, then advance over all of those.
-				skipTicks := (now.Sub(tick) + ft.period - 1) / ft.period
-				nextTick = nextTick.Add(skipTicks * ft.period)
-				// Now, keep advancing until we are past now. This should happen at most once.
-				for !nextTick.After(now) {
-					nextTick = nextTick.Add(ft.period)
-				}
-				// Figure out how long between now and the next scheduled tick, then wait that long.
-				remaining := nextTick.Sub(now)
-				fmt.Println("TICKTEST: runTickThread: reassigning next")
-				next = ft.clock.After(remaining)
-				fmt.Println("TICKTEST: runTickThread: entering select block")
-				// Finally, we can actually send the tick.
-				select {
-				case ft.c <- tick:
-					fmt.Println("TICKTEST: runTickThread: sent to ft.c")
-				default:
-				}
 			}
 		}
 	}()

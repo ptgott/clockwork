@@ -259,6 +259,7 @@ func (fc *fakeClock) Advance(d time.Duration) {
 			break
 		}
 		if s.kind == repeatingSleeper {
+			fmt.Println("TICKTEST: Advance: Adding a repeating sleeper")
 			fc.addRepeatingSleeper(s.ticker)
 		}
 		fmt.Println(time.Now(), "TICKTEST: Advance: sending end to a sleeper's done channel: ", s.done)
@@ -274,6 +275,27 @@ func (fc *fakeClock) Advance(d time.Duration) {
 	fc.blockers = notifyBlockers(fc.blockers, n)
 	fc.time = end
 	fmt.Println(time.Now(), "TICKTEST: Advance: end of the function. About to unlock fc.l")
+}
+
+// stopTicker removes any repeating sleepers originating from fakeTicker t from
+// the fakeClock's sleepers list.
+func (fc *fakeClock) stopTicker(t *fakeTicker) {
+	fc.l.Lock()
+	defer fc.l.Unlock()
+	// Find the first sleeper that does not belong to t and assign
+	// fc.sleepers to it.
+	for fc.sleepers.ticker == t {
+		fc.sleepers = fc.sleepers.next
+		continue
+	}
+	// Now that we have set the first sleeper (i.e., the head of the lsit)
+	// to something that doesn't belong to t, let's remove all linked
+	// sleepers that belong to t.
+	for s := fc.sleepers; s != nil; s = s.next {
+		if s.next != nil && s.next.ticker == t {
+			s.next = s.next.next
+		}
+	}
 }
 
 // BlockUntil will block until the fakeClock has the given number of sleepers
