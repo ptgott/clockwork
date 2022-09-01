@@ -97,12 +97,13 @@ const (
 // finished, it is possible to access the next sleeper via its next property.
 type sleeper struct {
 	until time.Time
-	done  chan time.Time
 	kind  sleeperKind
 	next  *sleeper
-	// associate the sleepr with a ticker so we can remove the sleepr when
+	// Associate the sleepr with a ticker so we can remove the sleepr when
 	// we stop the ticker
 	ticker *fakeTicker
+	// A function to called in Advance when the sleeper is ready.
+	notify func()
 }
 
 // blocker represents a caller of BlockUntil
@@ -116,7 +117,11 @@ type blocker struct {
 func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
 	fc.l.Lock()
 	defer fc.l.Unlock()
-	return fc.addSleeper(d, oneShotSleeper, nil)
+	return fc.addSleeper(
+		&sleeper{
+			until: fc.time.Add(d),
+			kind:  oneShotSleeper,
+		})
 }
 
 // addRepeatingSleeper adds a sleeper that waits for fakeTicker k's period  to
@@ -129,7 +134,11 @@ func (fc *fakeClock) addRepeatingSleeper(k *fakeTicker) {
 	if k.period.Nanoseconds() <= 0 {
 		panic("a repeating sleeper must have a positive, nonzero duration")
 	}
-	fc.addSleeper(k.period, repeatingSleeper, k)
+	fc.addSleeper(&sleeper{
+		until:  fc.time.Add(k.period),
+		kind:   repeatingSleeper,
+		ticker: k,
+	})
 	return
 }
 
@@ -137,21 +146,14 @@ func (fc *fakeClock) addRepeatingSleeper(k *fakeTicker) {
 // ordered by soonest to least soon.
 //
 // fc must be holding the lock on fc.l when calling addRepeatingSleeper.
-func (fc *fakeClock) addSleeper(d time.Duration, kind sleeperKind, k *fakeTicker) <-chan time.Time {
+func (fc *fakeClock) addSleeper(s *sleeper) <-chan time.Time {
 	now := fc.time
 	done := make(chan time.Time, 1)
-	if d.Nanoseconds() <= 0 {
+	if s.until.Sub(fc.time).Nanoseconds() <= 0 {
 		// special case - trigger immediately
 		done <- now
 	} else {
 		var n int
-		// otherwise, add to the set of sleepers
-		s := &sleeper{
-			until:  now.Add(d),
-			done:   done,
-			kind:   kind,
-			ticker: k,
-		}
 		// Order the sleepers by their until field, smallest to largest.
 		// Reassign the next sleeper to after s if necessary. Also count
 		// all sleepers.
@@ -262,9 +264,7 @@ func (fc *fakeClock) Advance(d time.Duration) {
 			fmt.Println("TICKTEST: Advance: Adding a repeating sleeper")
 			fc.addRepeatingSleeper(s.ticker)
 		}
-		fmt.Println(time.Now(), "TICKTEST: Advance: sending end to a sleeper's done channel: ", s.done)
-		// This sleeper has elapsed, so notify it.
-		s.done <- end
+		s.notify()
 	}
 	var n int
 	// Count the unelapsed sleepers
