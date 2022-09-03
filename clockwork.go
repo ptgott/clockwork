@@ -103,7 +103,8 @@ type sleeper struct {
 	// we stop the ticker
 	ticker *fakeTicker
 	// A function to called in Advance when the sleeper is ready.
-	notify func()
+	// The function is called with the fake clock's current time.
+	notify func(time.Time)
 }
 
 // blocker represents a caller of BlockUntil
@@ -116,12 +117,17 @@ type blocker struct {
 // fakeClock, then sends the current time on the returned channel.
 func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
 	fc.l.Lock()
+	t := make(chan time.Time, 1)
 	defer fc.l.Unlock()
-	return fc.addSleeper(
+	fc.addSleeper(
 		&sleeper{
 			until: fc.time.Add(d),
 			kind:  oneShotSleeper,
+			notify: func(m time.Time) {
+				t <- m
+			},
 		})
+	return (<-chan time.Time)(t)
 }
 
 // addRepeatingSleeper adds a sleeper that waits for fakeTicker k's period  to
@@ -138,6 +144,13 @@ func (fc *fakeClock) addRepeatingSleeper(k *fakeTicker) {
 		until:  fc.time.Add(k.period),
 		kind:   repeatingSleeper,
 		ticker: k,
+		notify: func(m time.Time) {
+			select {
+			case k.c <- m:
+			default:
+				return
+			}
+		},
 	})
 	return
 }
@@ -264,7 +277,7 @@ func (fc *fakeClock) Advance(d time.Duration) {
 			fmt.Println("TICKTEST: Advance: Adding a repeating sleeper")
 			fc.addRepeatingSleeper(s.ticker)
 		}
-		s.notify()
+		s.notify(fc.time)
 	}
 	var n int
 	// Count the unelapsed sleepers
@@ -284,7 +297,7 @@ func (fc *fakeClock) stopTicker(t *fakeTicker) {
 	defer fc.l.Unlock()
 	// Find the first sleeper that does not belong to t and assign
 	// fc.sleepers to it.
-	for fc.sleepers.ticker == t {
+	for fc.sleepers != nil && fc.sleepers.ticker == t {
 		fc.sleepers = fc.sleepers.next
 		continue
 	}
