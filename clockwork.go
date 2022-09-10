@@ -308,7 +308,7 @@ func (fc *fakeClock) Advance(d time.Duration) {
 				},
 			})
 		}
-		s.notify(lts[s.ticker])
+		s.notify(s.until)
 	}
 	var n int
 	// Count the unelapsed sleepers
