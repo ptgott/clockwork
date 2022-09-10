@@ -277,17 +277,20 @@ func (fc *fakeClock) Advance(d time.Duration) {
 	// Notify all sleepers that have elapsed. Reassign the fake clock's
 	// sleepers to those that have not elapsed.
 	for s := fc.sleepers; s != nil; s = s.next {
-		lt, ok := lts[s.ticker]
-		if ok {
-			lts[s.ticker] = lt.Add(s.ticker.period)
-		} else {
-			lts[s.ticker] = fc.time.Add(s.ticker.period)
-		}
-		if s.until.After(end) {
-			fc.sleepers = s
-			break
-		}
 		if s.kind == repeatingSleeper {
+			// The sleeper is repeating, so increment our internal map
+			// of each sleeper's latest time. This lets us assign the
+			// `until` field of each sleeper accurately.
+			lt, ok := lts[s.ticker]
+			if ok {
+				lts[s.ticker] = lt.Add(s.ticker.period)
+			} else {
+				lts[s.ticker] = s.until.Add(s.ticker.period)
+			}
+			if s.until.After(end) {
+				fc.sleepers = s
+				break
+			}
 			fmt.Println("TICKTEST: Advance: Adding a repeating sleeper")
 			// Simulate repeating ticker behavior by adding a new
 			// repeating sleeper with an until time corresponding to
