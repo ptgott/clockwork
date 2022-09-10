@@ -270,9 +270,19 @@ func (fc *fakeClock) Advance(d time.Duration) {
 	defer fc.l.Unlock()
 	fmt.Println(time.Now(), "TICKTEST: Advance: calling fc.time.Add")
 	end := fc.time.Add(d)
+
+	// The latest tick we have simulated for each fake ticker. We track this
+	// in order to send accurate times to each fake ticker's tick channel.
+	lts := make(map[*fakeTicker]time.Time)
 	// Notify all sleepers that have elapsed. Reassign the fake clock's
 	// sleepers to those that have not elapsed.
 	for s := fc.sleepers; s != nil; s = s.next {
+		lt, ok := lts[s.ticker]
+		if ok {
+			lts[s.ticker] = lt.Add(s.ticker.period)
+		} else {
+			lts[s.ticker] = fc.time.Add(s.ticker.period)
+		}
 		if s.until.After(end) {
 			fc.sleepers = s
 			break
@@ -283,7 +293,7 @@ func (fc *fakeClock) Advance(d time.Duration) {
 			// repeating sleeper with an until time corresponding to
 			// the next "tick".
 			fc.addSleeper(&sleeper{
-				until:  fc.time.Add(s.ticker.period),
+				until:  lts[s.ticker],
 				kind:   repeatingSleeper,
 				ticker: s.ticker,
 				notify: func(m time.Time) {
@@ -295,7 +305,7 @@ func (fc *fakeClock) Advance(d time.Duration) {
 				},
 			})
 		}
-		s.notify(fc.time)
+		s.notify(lts[s.ticker])
 	}
 	var n int
 	// Count the unelapsed sleepers
