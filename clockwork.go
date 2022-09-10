@@ -117,8 +117,12 @@ type blocker struct {
 // fakeClock, then sends the current time on the returned channel.
 func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
 	fc.l.Lock()
-	t := make(chan time.Time, 1)
 	defer fc.l.Unlock()
+	t := make(chan time.Time, 1)
+	if d.Nanoseconds() <= 0 {
+		// special case: trigger immediately
+		t <- fc.time
+	}
 	fc.addSleeper(
 		&sleeper{
 			until: fc.time.Add(d),
@@ -275,7 +279,21 @@ func (fc *fakeClock) Advance(d time.Duration) {
 		}
 		if s.kind == repeatingSleeper {
 			fmt.Println("TICKTEST: Advance: Adding a repeating sleeper")
-			fc.addRepeatingSleeper(s.ticker)
+			// Simulate repeating ticker behavior by adding a new
+			// repeating sleeper with an until time corresponding to
+			// the next "tick".
+			fc.addSleeper(&sleeper{
+				until:  fc.time.Add(s.ticker.period),
+				kind:   repeatingSleeper,
+				ticker: s.ticker,
+				notify: func(m time.Time) {
+					select {
+					case s.ticker.c <- m:
+					default:
+						return
+					}
+				},
+			})
 		}
 		s.notify(fc.time)
 	}
