@@ -130,13 +130,14 @@ func TestFakeTickerDuringSleep(t *testing.T) {
 
 	// Wait for the fake ticker and Sleep call to subscribe to notifications from
 	// the fake clock
+	fmt.Println("c.BlockUntil(2)")
 	c.BlockUntil(2)
 	assertState(t, i, 0)
 	c.Advance(1 * time.Hour)
 	// Wait for the fake ticker to reset
+	fmt.Println("c.BlockUntil(1)")
 	c.BlockUntil(1)
 	<-ft.Chan()
-	fmt.Println("TICKTEST: test: received from Chan")
 	wg.Wait()
 	assertState(t, i, 1)
 }
@@ -170,23 +171,18 @@ func TestFakeTickerMultipleTicks(t *testing.T) {
 	// still allowing for an arbitrarily large number.
 	if err := quick.Check(func(n uint8) bool {
 		fc := NewFakeClock()
-		fmt.Println(time.Now(), "TICKTEST quickcheck function: just created a fake clock")
 		tk := fc.NewTicker(time.Duration(1) * time.Millisecond)
 		s := make(chan struct{})
 		r := make(chan int)
-		fmt.Println(time.Now(), "TICKTEST quickcheck function: initializing the channel receiver goroutine")
 		go f(tk, s, r)
 		go func(c Clock, s chan struct{}) {
 			c.Sleep(time.Duration(n) * time.Millisecond)
-			fmt.Println(time.Now(), "TICKTEST quickcheck function: sending a struct to the stop channel")
 			s <- struct{}{}
 		}(fc, s)
 		fc.BlockUntil(2)
-		fmt.Println(time.Now(), "TICKTEST quickcheck function: calling Advance")
 		fc.Advance(time.Duration(n) * time.Millisecond)
 		fc.BlockUntil(1)
 		a = <-r
-		fmt.Println(time.Now(), "TICKTEST quickcheck function: receiving r from the ticker-checking goroutine")
 		if a != int(n) {
 			return false
 		}

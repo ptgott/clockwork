@@ -131,6 +131,13 @@ func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
 				t <- m
 			},
 		})
+
+	var n int
+	for s := fc.sleepers; s != nil; s = s.next {
+		n++
+	}
+	fc.blockers = notifyBlockers(fc.blockers, n)
+
 	return (<-chan time.Time)(t)
 }
 
@@ -156,6 +163,12 @@ func (fc *fakeClock) addRepeatingSleeper(k *fakeTicker) {
 			}
 		},
 	})
+	// Count the unelapsed sleepers
+	var n int
+	for s := fc.sleepers; s != nil; s = s.next {
+		n++
+	}
+	fc.blockers = notifyBlockers(fc.blockers, n)
 	return
 }
 
@@ -170,29 +183,23 @@ func (fc *fakeClock) addSleeper(s *sleeper) <-chan time.Time {
 		// special case - trigger immediately
 		done <- now
 	} else {
-		var n int
 		// Order the sleepers by their until field, smallest to largest.
 		// Reassign the next sleeper to after s if necessary. Also count
 		// all sleepers.
 		for l := fc.sleepers; l != nil; l = l.next {
-			n++
 			if (s.until.Equal(l.until) || s.until.After(l.until)) &&
 				(l.next == nil || l.next.until.After(s.until) || l.next.until.Equal(s.until)) {
 				if l.next != nil {
 					s.next = l.next
 				}
 				l.next = s
-				n++
 				break
 			}
 		}
 
 		if fc.sleepers == nil {
 			fc.sleepers = s
-			n++
 		}
-		// and notify any blockers
-		fc.blockers = notifyBlockers(fc.blockers, n)
 	}
 	return done
 
@@ -204,6 +211,7 @@ func (fc *fakeClock) addSleeper(s *sleeper) <-chan time.Time {
 func notifyBlockers(blockers []*blocker, count int) (newBlockers []*blocker) {
 	for _, b := range blockers {
 		if b.count <= count {
+			fmt.Println("CLOSING BLOCKER CHANNEL")
 			close(b.ch)
 		} else {
 			newBlockers = append(newBlockers, b)
@@ -318,10 +326,8 @@ func (fc *fakeClock) Advance(d time.Duration) {
 	for s := fc.sleepers; s != nil; s = s.next {
 		n++
 	}
-	fmt.Println(time.Now(), "TICKTEST: Advance: calling notifyBlockers")
 	fc.blockers = notifyBlockers(fc.blockers, n)
 	fc.time = end
-	fmt.Println(time.Now(), "TICKTEST: Advance: end of the function. About to unlock fc.l")
 }
 
 // stopTicker removes any repeating sleepers originating from fakeTicker t from

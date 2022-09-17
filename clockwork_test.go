@@ -168,3 +168,43 @@ func TestTwoBlockersOneBlock(t *testing.T) {
 	ft1.Stop()
 	ft2.Stop()
 }
+
+func TestAddSleeper(t *testing.T) {
+	m := time.Now()
+	s1 := sleeper{
+		until: m.Add(10 * time.Second),
+	}
+	s2 := sleeper{
+		until: m.Add(3 * time.Second),
+	}
+	s3 := sleeper{
+		until: m.Add(7 * time.Second),
+	}
+	fc := &fakeClock{}
+	fc.addSleeper(&s1)
+	fc.addSleeper(&s2)
+	fc.addSleeper(&s3)
+
+	// Adding an already added sleeper should be idempotent
+	fc.addSleeper(&s2)
+
+	if fc.sleepers != &s2 {
+		t.Fatal("expected the earliest sleeper to come first")
+	}
+	if fc.sleepers.next != &s3 {
+		t.Fatal("expected the middle sleeper to come second")
+	}
+	if fc.sleepers.next.next != &s1 {
+		t.Fatal("expected the latest sleeper to come last")
+	}
+
+	var i int
+	for s := fc.sleepers; s != nil; s = s.next {
+		i++
+	}
+
+	if i != 3 {
+		t.Fatalf("unepxected number of sleepers: got %v, wanted %v", i, 3)
+	}
+
+}
