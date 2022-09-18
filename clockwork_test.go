@@ -172,13 +172,13 @@ func TestTwoBlockersOneBlock(t *testing.T) {
 func TestAddSleeper(t *testing.T) {
 	m := time.Now()
 	s1 := sleeper{
-		until: m.Add(10 * time.Second),
+		until: m.Add(10),
 	}
 	s2 := sleeper{
-		until: m.Add(3 * time.Second),
+		until: m.Add(3),
 	}
 	s3 := sleeper{
-		until: m.Add(7 * time.Second),
+		until: m.Add(7),
 	}
 	fc := &fakeClock{}
 	fc.addSleeper(&s1)

@@ -183,23 +183,33 @@ func (fc *fakeClock) addSleeper(s *sleeper) <-chan time.Time {
 		// special case - trigger immediately
 		done <- now
 	} else {
+		if fc.sleepers == nil {
+			fc.sleepers = s
+			return done
+		}
+
 		// Order the sleepers by their until field, smallest to largest.
 		// Reassign the next sleeper to after s if necessary. Also count
 		// all sleepers.
+		var b *sleeper // The previous sleeper
 		for l := fc.sleepers; l != nil; l = l.next {
-			if (s.until.Equal(l.until) || s.until.After(l.until)) &&
-				(l.next == nil || l.next.until.After(s.until) || l.next.until.Equal(s.until)) {
-				if l.next != nil {
-					s.next = l.next
-				}
-				l.next = s
+			if s == l {
+				// Don't allow duplicate sleepers
 				break
 			}
+			if s.until.Before(l.until) ||
+				s.until.Equal(l.until) {
+				s.next = l
+				if b != nil {
+					b.next = s
+				} else {
+					fc.sleepers = s
+				}
+				break
+			}
+			b = l
 		}
 
-		if fc.sleepers == nil {
-			fc.sleepers = s
-		}
 	}
 	return done
 
