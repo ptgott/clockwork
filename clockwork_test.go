@@ -180,10 +180,14 @@ func TestAddSleeper(t *testing.T) {
 	s3 := sleeper{
 		until: m.Add(7),
 	}
+	s4 := sleeper{
+		until: m.Add(15),
+	}
 	fc := &fakeClock{}
 	fc.addSleeper(&s1)
-	fc.addSleeper(&s2)
-	fc.addSleeper(&s3)
+	fc.addSleeper(&s2) // Adding the earliest sleeper second
+	fc.addSleeper(&s3) // We expect this one to sit somewhere in the middle
+	fc.addSleeper(&s4) // Adding the latest sleeper last
 
 	// Adding an already added sleeper should be idempotent
 	fc.addSleeper(&s2)
@@ -195,6 +199,9 @@ func TestAddSleeper(t *testing.T) {
 		t.Fatal("expected the middle sleeper to come second")
 	}
 	if fc.sleepers.next.next != &s1 {
+		t.Fatal("expected the second-latest sleeper to come next-to-last")
+	}
+	if fc.sleepers.next.next.next != &s4 {
 		t.Fatal("expected the latest sleeper to come last")
 	}
 
@@ -203,8 +210,10 @@ func TestAddSleeper(t *testing.T) {
 		i++
 	}
 
-	if i != 3 {
-		t.Fatalf("unepxected number of sleepers: got %v, wanted %v", i, 3)
+	exp := 4
+
+	if i != exp {
+		t.Fatalf("unepxected number of sleepers: got %v, wanted %v", i, exp)
 	}
 
 }

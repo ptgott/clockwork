@@ -207,6 +207,13 @@ func (fc *fakeClock) addSleeper(s *sleeper) <-chan time.Time {
 				}
 				break
 			}
+			// We're at the last sleeper in the chain and the
+			// candidate sleeper doesn't come before it and isn't
+			// equal to it, so we'll place the candidate last.
+			if l.next == nil {
+				l.next = s
+				break
+			}
 			b = l
 		}
 
