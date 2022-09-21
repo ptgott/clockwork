@@ -128,6 +128,7 @@ func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
 			until: fc.time.Add(d),
 			kind:  oneShotSleeper,
 			notify: func(m time.Time) {
+				fmt.Println("MULTITICKS: NOTIFYING ONESHOT SLEEPER with until ", fc.time.Add(d))
 				t <- m
 			},
 		})
@@ -156,6 +157,7 @@ func (fc *fakeClock) addRepeatingSleeper(k *fakeTicker) {
 		kind:   repeatingSleeper,
 		ticker: k,
 		notify: func(m time.Time) {
+			fmt.Println("MULTITICKS: NOTIFYING REPEATING SLEEPER with until", fc.time.Add(k.period))
 			select {
 			case k.c <- m:
 			default:
@@ -228,7 +230,6 @@ func (fc *fakeClock) addSleeper(s *sleeper) <-chan time.Time {
 func notifyBlockers(blockers []*blocker, count int) (newBlockers []*blocker) {
 	for _, b := range blockers {
 		if b.count <= count {
-			fmt.Println("CLOSING BLOCKER CHANNEL")
 			close(b.ch)
 		} else {
 			newBlockers = append(newBlockers, b)
@@ -290,10 +291,8 @@ func (fc *fakeClock) NewTimer(d time.Duration) Timer {
 // Advance advances fakeClock to a new point in time, ensuring channels from any
 // previous invocations of After are notified appropriately before returning
 func (fc *fakeClock) Advance(d time.Duration) {
-	fmt.Println(time.Now(), "TICKTEST: Advance: locking fc.l")
 	fc.l.Lock()
 	defer fc.l.Unlock()
-	fmt.Println(time.Now(), "TICKTEST: Advance: calling fc.time.Add")
 	end := fc.time.Add(d)
 
 	// The latest tick we have simulated for each fake ticker. We track this
@@ -319,7 +318,7 @@ func (fc *fakeClock) Advance(d time.Duration) {
 			} else {
 				lts[s.ticker] = s.until.Add(s.ticker.period)
 			}
-			fmt.Println("TICKTEST: Advance: Adding a repeating sleeper")
+			fmt.Println("MULTITICKS: Advance: Adding a repeating sleeper")
 			// Simulate repeating ticker behavior by adding a new
 			// repeating sleeper with an until time corresponding to
 			// the next "tick".
@@ -328,6 +327,7 @@ func (fc *fakeClock) Advance(d time.Duration) {
 				kind:   repeatingSleeper,
 				ticker: s.ticker,
 				notify: func(m time.Time) {
+					fmt.Println("MULTITICKS: NOTIFYING REPEATING SLEEPER with until", lts[s.ticker])
 					select {
 					case s.ticker.c <- m:
 					default:

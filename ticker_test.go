@@ -130,12 +130,10 @@ func TestFakeTickerDuringSleep(t *testing.T) {
 
 	// Wait for the fake ticker and Sleep call to subscribe to notifications from
 	// the fake clock
-	fmt.Println("c.BlockUntil(2)")
 	c.BlockUntil(2)
 	assertState(t, i, 0)
 	c.Advance(1 * time.Hour)
 	// Wait for the fake ticker to reset
-	fmt.Println("c.BlockUntil(1)")
 	c.BlockUntil(1)
 	<-ft.Chan()
 	wg.Wait()
@@ -153,10 +151,9 @@ func TestFakeTickerMultipleTicks(t *testing.T) {
 		for {
 			select {
 			case <-k.Chan():
-				fmt.Println(time.Now(), "TICKTEST ticker-checking goroutine: received from Chan and incrementing i")
+				fmt.Println("MULTITICKS: incrementing i")
 				i++
 			case <-s:
-				fmt.Println(time.Now(), "TICKTEST ticker-checking goroutine: received from s and sending the final tally")
 				r <- i
 			}
 		}
@@ -170,6 +167,7 @@ func TestFakeTickerMultipleTicks(t *testing.T) {
 	// Limiting the number of ticks to make debugging more manageable while
 	// still allowing for an arbitrarily large number.
 	if err := quick.Check(func(n uint8) bool {
+		fmt.Println("MULTITICKS n:", n)
 		fc := NewFakeClock()
 		tk := fc.NewTicker(time.Duration(1) * time.Millisecond)
 		s := make(chan struct{})
@@ -181,7 +179,6 @@ func TestFakeTickerMultipleTicks(t *testing.T) {
 		}(fc, s)
 		fc.BlockUntil(2)
 		fc.Advance(time.Duration(n) * time.Millisecond)
-		fc.BlockUntil(1)
 		a = <-r
 		if a != int(n) {
 			return false
