@@ -157,12 +157,8 @@ func (fc *fakeClock) addRepeatingSleeper(k *fakeTicker) {
 		kind:   repeatingSleeper,
 		ticker: k,
 		notify: func(m time.Time) {
-			fmt.Println("MULTITICKS: NOTIFYING REPEATING SLEEPER with until", fc.time.Add(k.period))
-			select {
-			case k.c <- m:
-			default:
-				return
-			}
+			k.c <- m
+			return
 		},
 	})
 	// Count the unelapsed sleepers
@@ -327,12 +323,8 @@ func (fc *fakeClock) Advance(d time.Duration) {
 				kind:   repeatingSleeper,
 				ticker: s.ticker,
 				notify: func(m time.Time) {
-					fmt.Println("MULTITICKS: NOTIFYING REPEATING SLEEPER with until", lts[s.ticker])
-					select {
-					case s.ticker.c <- m:
-					default:
-						return
-					}
+					s.ticker.c <- m
+					return
 				},
 			})
 		}
