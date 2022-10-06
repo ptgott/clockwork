@@ -175,6 +175,7 @@ func (fc *fakeClock) addRepeatingSleeper(k *fakeTicker) {
 //
 // fc must be holding the lock on fc.l when calling addRepeatingSleeper.
 func (fc *fakeClock) addSleeper(s *sleeper) <-chan time.Time {
+	fmt.Println("CALLING ADDSLEEPER")
 	now := fc.time
 	done := make(chan time.Time, 1)
 	if s.until.Sub(fc.time).Nanoseconds() <= 0 {
@@ -182,6 +183,7 @@ func (fc *fakeClock) addSleeper(s *sleeper) <-chan time.Time {
 		done <- now
 	} else {
 		if fc.sleepers == nil {
+			fmt.Println("INSERTING A SLEEPER")
 			fc.sleepers = s
 			return done
 		}
@@ -192,11 +194,13 @@ func (fc *fakeClock) addSleeper(s *sleeper) <-chan time.Time {
 		var b *sleeper // The previous sleeper
 		for l := fc.sleepers; l != nil; l = l.next {
 			if s == l {
+				fmt.Println("FOUND DUPLICATE SLEEPER")
 				// Don't allow duplicate sleepers
 				break
 			}
 			if s.until.Before(l.until) ||
 				s.until.Equal(l.until) {
+				fmt.Println("INSERTING A SLEEPER")
 				s.next = l
 				if b != nil {
 					b.next = s
@@ -209,6 +213,7 @@ func (fc *fakeClock) addSleeper(s *sleeper) <-chan time.Time {
 			// candidate sleeper doesn't come before it and isn't
 			// equal to it, so we'll place the candidate last.
 			if l.next == nil {
+				fmt.Println("INSERTING A SLEEPER")
 				l.next = s
 				break
 			}
@@ -314,7 +319,6 @@ func (fc *fakeClock) Advance(d time.Duration) {
 			} else {
 				lts[s.ticker] = s.until.Add(s.ticker.period)
 			}
-			fmt.Println("MULTITICKS: Advance: Adding a repeating sleeper")
 			// Simulate repeating ticker behavior by adding a new
 			// repeating sleeper with an until time corresponding to
 			// the next "tick".
@@ -335,6 +339,7 @@ func (fc *fakeClock) Advance(d time.Duration) {
 	for s := fc.sleepers; s != nil; s = s.next {
 		n++
 	}
+	fmt.Println("FINAL SLEEPER COUNT IN ADVANCE:", n)
 	fc.blockers = notifyBlockers(fc.blockers, n)
 	fc.time = end
 }
