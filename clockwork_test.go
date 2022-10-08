@@ -205,10 +205,7 @@ func TestAddSleeper(t *testing.T) {
 		t.Fatal("expected the latest sleeper to come last")
 	}
 
-	var i int
-	for s := fc.sleepers; s != nil; s = s.next {
-		i++
-	}
+	i := fc.countSleepers()
 
 	exp := 4
 
