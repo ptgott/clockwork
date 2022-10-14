@@ -280,50 +280,62 @@ func (fc *fakeClock) NewTimer(d time.Duration) Timer {
 	return ft
 }
 
+// advanceSleepers refreshes s so that it contains only sleepers that elapse
+// after t. If s or any of its successors is a repeating sleeper,
+// advanceSleepers adds repetitions of the sleeper. It returns the earlest
+// sleeper in the newly refreshed list of sleepers.
+func advanceSleepers(s *sleeper, t time.Time) *sleeper {
+	// The latest tick we have simulated for each fake ticker. We track this
+	// in order to send accurate times to each fake ticker's tick channel.
+	lts := make(map[*fakeTicker]time.Time)
+
+	var e *sleeper
+
+	for r := s; r != nil; r = r.next {
+		// Sleepers are ordered chronologically, so reset sleepers to
+		// the first one that is after the fake clock'r new time.
+		if r.until.After(t) {
+			e = r
+			break
+		}
+
+		if r.kind == repeatingSleeper {
+			// The sleeper is repeating, so increment our internal map
+			// of each sleeper'r latest time. This lets us assign the
+			// `until` field of each sleeper accurately.
+			lt, ok := lts[r.ticker]
+			if ok {
+				lts[r.ticker] = lt.Add(r.ticker.period)
+			} else {
+				lts[r.ticker] = r.until.Add(r.ticker.period)
+			}
+			// Simulate repeating ticker behavior by adding a new
+			// repeating sleeper with an until time corresponding to
+			// the next "tick".
+			r.ticker.clock.(*fakeClock).addSleeper(&sleeper{
+				until:  lts[r.ticker],
+				kind:   repeatingSleeper,
+				ticker: r.ticker,
+				notify: func(m time.Time) {
+					r.ticker.c <- m
+					return
+				},
+			})
+		}
+	}
+	return e
+}
+
 // Advance advances fakeClock to a new point in time, ensuring channels from any
 // previous invocations of After are notified appropriately before returning
 func (fc *fakeClock) Advance(d time.Duration) {
 	fc.l.Lock()
 	defer fc.l.Unlock()
 	end := fc.time.Add(d)
+	fc.sleepers = advanceSleepers(fc.sleepers, end)
 
-	// The latest tick we have simulated for each fake ticker. We track this
-	// in order to send accurate times to each fake ticker's tick channel.
-	lts := make(map[*fakeTicker]time.Time)
-	// Notify all sleepers that have elapsed. Reassign the fake clock's
-	// sleepers to those that have not elapsed.
-	for s := fc.sleepers; s != nil; s = s.next {
-		// Sleepers are ordered chronologically, so reset sleepers to
-		// the first one that is after the fake clock's new time.
-		if s.until.After(end) {
-			fc.sleepers = s
-			break
-		}
-
-		if s.kind == repeatingSleeper {
-			// The sleeper is repeating, so increment our internal map
-			// of each sleeper's latest time. This lets us assign the
-			// `until` field of each sleeper accurately.
-			lt, ok := lts[s.ticker]
-			if ok {
-				lts[s.ticker] = lt.Add(s.ticker.period)
-			} else {
-				lts[s.ticker] = s.until.Add(s.ticker.period)
-			}
-			// Simulate repeating ticker behavior by adding a new
-			// repeating sleeper with an until time corresponding to
-			// the next "tick".
-			fc.addSleeper(&sleeper{
-				until:  lts[s.ticker],
-				kind:   repeatingSleeper,
-				ticker: s.ticker,
-				notify: func(m time.Time) {
-					s.ticker.c <- m
-					return
-				},
-			})
-		}
-		s.notify(s.until)
+	for r := fc.sleepers; r != nil; r = r.next {
+		r.notify(r.until)
 	}
 	fc.blockers = notifyBlockers(fc.blockers, fc.countSleepers())
 	fc.time = end
