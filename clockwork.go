@@ -280,22 +280,31 @@ func (fc *fakeClock) NewTimer(d time.Duration) Timer {
 	return ft
 }
 
+// sleeperSet is used to track operations on linked lists of sleepers. It
+// contains the first in a list of elapsed sleepers as well as the first in a
+// list of unelapsed sleepers.
+type sleeperSet struct {
+	elapsed   *sleeper
+	unelapsed *sleeper
+}
+
 // advanceSleepers refreshes s so that it contains only sleepers that elapse
 // after t. If s or any of its successors is a repeating sleeper,
 // advanceSleepers adds repetitions of the sleeper. It returns the earlest
-// sleeper in the newly refreshed list of sleepers.
-func advanceSleepers(s *sleeper, t time.Time) *sleeper {
+// sleeper in the newly refreshed list of sleepers, plus the earlest elapsed
+// sleeper, in a sleeperSet.
+func advanceSleepers(s *sleeper, t time.Time) sleeperSet {
+	ss := sleeperSet{}
+
 	// The latest tick we have simulated for each fake ticker. We track this
 	// in order to send accurate times to each fake ticker's tick channel.
 	lts := make(map[*fakeTicker]time.Time)
 
-	var e *sleeper
-
 	for r := s; r != nil; r = r.next {
 		// Sleepers are ordered chronologically, so reset sleepers to
-		// the first one that is after the fake clock'r new time.
+		// the first one that is after the fake clock's new time.
 		if r.until.After(t) {
-			e = r
+			ss.unelapsed = r
 			break
 		}
 
@@ -323,7 +332,7 @@ func advanceSleepers(s *sleeper, t time.Time) *sleeper {
 			})
 		}
 	}
-	return e
+	return ss
 }
 
 // Advance advances fakeClock to a new point in time, ensuring channels from any
@@ -332,9 +341,10 @@ func (fc *fakeClock) Advance(d time.Duration) {
 	fc.l.Lock()
 	defer fc.l.Unlock()
 	end := fc.time.Add(d)
-	fc.sleepers = advanceSleepers(fc.sleepers, end)
+	ss := advanceSleepers(fc.sleepers, end)
+	fc.sleepers = ss.unelapsed
 
-	for r := fc.sleepers; r != nil; r = r.next {
+	for r := ss.elapsed; r != nil; r = r.next {
 		r.notify(r.until)
 	}
 	fc.blockers = notifyBlockers(fc.blockers, fc.countSleepers())
