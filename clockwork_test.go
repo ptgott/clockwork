@@ -237,3 +237,95 @@ func TestAddSleeper(t *testing.T) {
 	}
 
 }
+
+func TestAdvanceSleepersCounts(t *testing.T) {
+
+	t.Run("advance to the middle of a list of repeating sleepers", func(t *testing.T) {
+		fc := NewFakeClock()
+		r := fc.NewTicker(10).(*fakeTicker)
+		m := time.Now()
+
+		s1 := sleeper{
+			until:  m.Add(40),
+			kind:   repeatingSleeper,
+			ticker: r,
+			next:   nil,
+		}
+		s2 := sleeper{
+			until:  m.Add(30),
+			kind:   repeatingSleeper,
+			ticker: r,
+			next:   &s1,
+		}
+
+		s3 := sleeper{
+			until:  m.Add(20),
+			kind:   repeatingSleeper,
+			ticker: r,
+			next:   &s2,
+		}
+
+		s4 := sleeper{
+			until:  m.Add(10),
+			kind:   repeatingSleeper,
+			ticker: r,
+			next:   &s3,
+		}
+
+		// Advance to the middle of the sleepers
+		ss := advanceSleepers(&s4, m.Add(25))
+		ee := 2
+		eu := 2
+		if au := countSleepers(ss.unelapsed); au != eu {
+			t.Errorf("expected %v unelapsed sleepers but got %v", eu, au)
+		}
+
+		if ae := countSleepers(ss.elapsed); ae != ee {
+			t.Errorf("expected %v elapsed sleepers but got %v", ee, ae)
+		}
+	})
+	t.Run("advance beyond the end of a list of repeating sleepers", func(t *testing.T) {
+		fc := NewFakeClock()
+		r := fc.NewTicker(10).(*fakeTicker)
+		m := time.Now()
+
+		s1 := sleeper{
+			until:  m.Add(40),
+			kind:   repeatingSleeper,
+			ticker: r,
+			next:   nil,
+		}
+		s2 := sleeper{
+			until:  m.Add(30),
+			kind:   repeatingSleeper,
+			ticker: r,
+			next:   &s1,
+		}
+
+		s3 := sleeper{
+			until:  m.Add(20),
+			kind:   repeatingSleeper,
+			ticker: r,
+			next:   &s2,
+		}
+
+		s4 := sleeper{
+			until:  m.Add(10),
+			kind:   repeatingSleeper,
+			ticker: r,
+			next:   &s3,
+		}
+
+		// Advance to the middle of the sleepers
+		ss := advanceSleepers(&s4, m.Add(75))
+		ee := 7
+		eu := 1
+		if au := countSleepers(ss.unelapsed); au != eu {
+			t.Errorf("expected %v unelapsed sleepers but got %v", eu, au)
+		}
+
+		if ae := countSleepers(ss.elapsed); ae != ee {
+			t.Errorf("expected %v elapsed sleepers but got %v", ee, ae)
+		}
+	})
+}
