@@ -184,25 +184,48 @@ func TestAddSleeper(t *testing.T) {
 		until: m.Add(15),
 	}
 	fc := &fakeClock{}
-	fc.addSleeper(&s1)
-	fc.addSleeper(&s2) // Adding the earliest sleeper second
-	fc.addSleeper(&s3) // We expect this one to sit somewhere in the middle
-	fc.addSleeper(&s4) // Adding the latest sleeper last
+	fc.sleepers = addSleeper(fc.sleepers, &s1)
+	fc.sleepers = addSleeper(fc.sleepers, &s2) // Adding the earliest sleeper second
+	fc.sleepers = addSleeper(fc.sleepers, &s3) // We expect this one to sit somewhere in the middle
+	fc.sleepers = addSleeper(fc.sleepers, &s4) // Adding the latest sleeper last
 
 	// Adding an already added sleeper should be idempotent
-	fc.addSleeper(&s2)
+	fc.sleepers = addSleeper(fc.sleepers, &s2)
+
+	if fc.sleepers == nil {
+		t.Fatal("expected the fake clock's first sleeper not to be nil, but it was")
+	}
 
 	if fc.sleepers != &s2 {
-		t.Fatal("expected the earliest sleeper to come first")
+		t.Fatalf(
+			"expected the earliest sleeper to come first\ncurrent time: %v\nearliest sleeper time:%v",
+			m,
+			fc.sleepers.until,
+		)
 	}
 	if fc.sleepers.next != &s3 {
-		t.Fatal("expected the middle sleeper to come second")
+		t.Fatalf(
+			"expected the second-earliest sleeper to come second\n"+
+				"current time: %v\nsecond sleeper time:%v",
+			m,
+			fc.sleepers.next.until,
+		)
 	}
 	if fc.sleepers.next.next != &s1 {
-		t.Fatal("expected the second-latest sleeper to come next-to-last")
+		t.Fatalf(
+			"expected the second-latest sleeper to come next-to-last\n"+
+				"current time: %v\nnext-to-last sleeper time:%v",
+			m,
+			fc.sleepers.next.next.until,
+		)
 	}
 	if fc.sleepers.next.next.next != &s4 {
-		t.Fatal("expected the latest sleeper to come last")
+		t.Fatalf(
+			"expected the latest sleeper to come last\n"+
+				"current time: %v\nfinal sleeper time:%v",
+			m,
+			fc.sleepers.next.next.next.until,
+		)
 	}
 
 	i := fc.countSleepers()
