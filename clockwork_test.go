@@ -228,7 +228,7 @@ func TestAddSleeper(t *testing.T) {
 		)
 	}
 
-	i := fc.countSleepers()
+	i := countSleepers(fc.sleepers)
 
 	exp := 4
 

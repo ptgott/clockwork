@@ -134,7 +134,7 @@ func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
 			},
 		})
 
-	fc.blockers = notifyBlockers(fc.blockers, fc.countSleepers())
+	fc.blockers = notifyBlockers(fc.blockers, countSleepers(fc.sleepers))
 
 	return (<-chan time.Time)(t)
 }
@@ -160,7 +160,7 @@ func (fc *fakeClock) addRepeatingSleeper(k *fakeTicker) {
 				return
 			},
 		})
-	fc.blockers = notifyBlockers(fc.blockers, fc.countSleepers())
+	fc.blockers = notifyBlockers(fc.blockers, countSleepers(fc.sleepers))
 	return
 }
 
@@ -341,7 +341,7 @@ func (fc *fakeClock) Advance(d time.Duration) {
 	for r := ss.elapsed; r != nil; r = r.next {
 		r.notify(r.until)
 	}
-	fc.blockers = notifyBlockers(fc.blockers, fc.countSleepers())
+	fc.blockers = notifyBlockers(fc.blockers, countSleepers(fc.sleepers))
 	fc.time = end
 }
 
@@ -366,9 +366,11 @@ func (fc *fakeClock) stopTicker(t *fakeTicker) {
 	}
 }
 
-func (fc *fakeClock) countSleepers() int {
+// countSleepers counts all sleepers in the list with head at r and returns the
+// number of sleepers counted.
+func countSleepers(r *sleeper) int {
 	var p int
-	for s := fc.sleepers; s != nil; s = s.next {
+	for s := r; s != nil; s = s.next {
 		p++
 	}
 	return p
@@ -378,7 +380,7 @@ func (fc *fakeClock) countSleepers() int {
 // (callers of Sleep or After)
 func (fc *fakeClock) BlockUntil(n int) {
 	fc.l.Lock()
-	p := fc.countSleepers()
+	p := countSleepers(fc.sleepers)
 	// Fast path: we already have >= n sleepers.
 	if p >= n {
 		fc.l.Unlock()
