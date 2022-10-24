@@ -187,7 +187,7 @@ func addSleeper(h, s *sleeper) *sleeper {
 		}
 		if s.until.Before(l.until) ||
 			s.until.Equal(l.until) {
-			fmt.Println("INSERTING A SLEEPER")
+			fmt.Printf("INSERTING A SLEEPER because it's before/equal to %v", l.until)
 			s.next = l
 			if b != nil {
 				b.next = s
@@ -200,7 +200,7 @@ func addSleeper(h, s *sleeper) *sleeper {
 		// candidate sleeper doesn't come before it and isn't
 		// equal to it, so we'll place the candidate last.
 		if l.next == nil {
-			fmt.Println("INSERTING A SLEEPER")
+			fmt.Println("INSERTING A SLEEPER because the current sleeper's next is nil")
 			l.next = s
 			break
 		}
@@ -295,12 +295,17 @@ func advanceSleepers(s *sleeper, t time.Time) sleeperSet {
 	lts := make(map[*fakeTicker]time.Time)
 
 	for r := s; r != nil; r = r.next {
-		// Sleepers are ordered chronologically, so reset sleepers to
-		// the first one that is after the fake clock's new time.
+		// Sleepers are ordered chronologically, so set the unelapsed
+		// sleepers to the first one that is after the fake clock's new
+		// time.
 		if r.until.After(t) {
 			ss.unelapsed = r
 			break
 		}
+
+		// Update ss.elapsed each iteration. r is not after t, so it
+		// must be before or at the same time.
+		ss.elapsed = r
 
 		if r.kind == repeatingSleeper {
 			// The sleeper is repeating, so increment our internal map
