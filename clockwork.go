@@ -307,20 +307,17 @@ func advanceSleepers(s *sleeper, t time.Time) sleeperSet {
 			continue
 		}
 
-		// We consider a sleeper elapsed if it'p "until" time is before
+		// We consider a sleeper elapsed if its "until" time is before
 		// or equal to the provided time.
 		ss.elapsed = addSleeper(ss.elapsed, &p)
 		fmt.Printf("adding a sleeper to the elapsed list: %+v\n", p)
 		fmt.Printf("length of ss.elapsed after adding a sleeper: %v\n", countSleepers(ss.elapsed))
 
-		// TODO: We always add a repeating sleeper to the unelapsed list,
-		// which may not be correct.  **Add conditional for determing
-		// whether to move the sleeper to the elapsed or unelapsed
-		// lists**
-
 		// We're processing a repeating sleeper, so see if there are any
 		// repetitions we need to handle as well.
 		if r.kind == repeatingSleeper {
+			// TODO: Process all repetitions, not just one!
+
 			// Increment our internal map of each sleeper'r latest
 			// time. This lets us assign the `until` field of each
 			// sleeper accurately.
@@ -330,10 +327,8 @@ func advanceSleepers(s *sleeper, t time.Time) sleeperSet {
 			} else {
 				lts[r.ticker] = r.until.Add(r.ticker.period)
 			}
-			// Simulate repeating ticker behavior by adding a new
-			// repeating sleeper with an until time corresponding to
-			// the next "tick".
-			ss.unelapsed = addSleeper(ss.unelapsed, &sleeper{
+
+			e := sleeper{
 				until:  lts[r.ticker],
 				kind:   repeatingSleeper,
 				ticker: r.ticker,
@@ -341,7 +336,13 @@ func advanceSleepers(s *sleeper, t time.Time) sleeperSet {
 					r.ticker.c <- m
 					return
 				},
-			})
+			}
+
+			if lts[r.ticker].After(t) {
+				ss.unelapsed = addSleeper(ss.unelapsed, &e)
+			} else {
+				ss.elapsed = addSleeper(ss.elapsed, &e)
+			}
 		}
 	}
 	return ss
