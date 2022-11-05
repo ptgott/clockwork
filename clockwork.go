@@ -181,13 +181,11 @@ func addSleeper(h, s *sleeper) *sleeper {
 	var b *sleeper // The previous sleeper
 	for l := h; l != nil; l = l.next {
 		if s == l {
-			fmt.Println("FOUND DUPLICATE SLEEPER")
 			// Don't allow duplicate sleepers
 			break
 		}
 		if s.until.Before(l.until) ||
 			s.until.Equal(l.until) {
-			fmt.Printf("INSERTING A SLEEPER because it's before/equal to %v", l.until)
 			s.next = l
 			if b != nil {
 				b.next = s
@@ -200,7 +198,6 @@ func addSleeper(h, s *sleeper) *sleeper {
 		// candidate sleeper doesn't come before it and isn't
 		// equal to it, so we'll place the candidate last.
 		if l.next == nil {
-			fmt.Println("INSERTING A SLEEPER because the current sleeper's next is nil")
 			l.next = s
 			break
 		}
@@ -288,6 +285,7 @@ type sleeperSet struct {
 // sleeper in the newly refreshed list of sleepers, plus the earlest elapsed
 // sleeper, in a sleeperSet.
 func advanceSleepers(s *sleeper, t time.Time) sleeperSet {
+	fmt.Printf("length of sleeper list s at the top of advanceSleepers: %v\n", countSleepers(s))
 	ss := sleeperSet{}
 
 	// The latest tick we have simulated for each fake ticker. We track this
@@ -295,22 +293,36 @@ func advanceSleepers(s *sleeper, t time.Time) sleeperSet {
 	lts := make(map[*fakeTicker]time.Time)
 
 	for r := s; r != nil; r = r.next {
-		// Sleepers are ordered chronologically, so set the unelapsed
-		// sleepers to the first one that is after the fake clock's new
-		// time.
+		// Create a copy of the sleeper and unset its next sleeper so we
+		// don't alter the original list
+		p := *r
+		p.next = nil
+
+		// The sleeper hasn't elapsed yet, so don't process any
+		// repetitions and continue to the next sleeper.
 		if r.until.After(t) {
-			ss.unelapsed = r
-			break
+			fmt.Printf("adding a sleeper to the unelapsed list: %+v\n", p)
+			ss.unelapsed = addSleeper(ss.unelapsed, &p)
+			fmt.Printf("length of ss.unelapsed after adding a sleeper: %v\n", countSleepers(ss.unelapsed))
+			continue
 		}
 
-		// Update ss.elapsed each iteration. r is not after t, so it
-		// must be before or at the same time.
-		ss.elapsed = r
+		// We consider a sleeper elapsed if it'p "until" time is before
+		// or equal to the provided time.
+		ss.elapsed = addSleeper(ss.elapsed, &p)
+		fmt.Printf("adding a sleeper to the elapsed list: %+v\n", p)
+		fmt.Printf("length of ss.elapsed after adding a sleeper: %v\n", countSleepers(ss.elapsed))
 
+		// TODO: Rethink the logic of processing repeating sleepers,
+		// which is kind of borked right now. We always add a repeating
+		// sleeper to the unelapsed list, which may not be correct.
+
+		// We're processing a repeating sleeper, so see if there are any
+		// repetitions we need to handle as well.
 		if r.kind == repeatingSleeper {
-			// The sleeper is repeating, so increment our internal map
-			// of each sleeper'r latest time. This lets us assign the
-			// `until` field of each sleeper accurately.
+			// Increment our internal map of each sleeper'r latest
+			// time. This lets us assign the `until` field of each
+			// sleeper accurately.
 			lt, ok := lts[r.ticker]
 			if ok {
 				lts[r.ticker] = lt.Add(r.ticker.period)
