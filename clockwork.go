@@ -316,7 +316,11 @@ func advanceSleepers(s *sleeper, t time.Time) sleeperSet {
 		// We're processing a repeating sleeper, so see if there are any
 		// repetitions we need to handle as well.
 		if r.kind == repeatingSleeper {
-			// TODO: Process all repetitions, not just one!
+			// TODO: Process all repetitions, not just one! The
+			// simplest way would be to add the new sleeper "e" to
+			// the list we're ranging through now, rather than the
+			// unelapsed/elapsed lists. Maybe copy the whole list
+			// above so we can modify it.
 
 			// Increment our internal map of each sleeper'r latest
 			// time. This lets us assign the `until` field of each
