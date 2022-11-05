@@ -313,9 +313,10 @@ func advanceSleepers(s *sleeper, t time.Time) sleeperSet {
 		fmt.Printf("adding a sleeper to the elapsed list: %+v\n", p)
 		fmt.Printf("length of ss.elapsed after adding a sleeper: %v\n", countSleepers(ss.elapsed))
 
-		// TODO: Rethink the logic of processing repeating sleepers,
-		// which is kind of borked right now. We always add a repeating
-		// sleeper to the unelapsed list, which may not be correct.
+		// TODO: We always add a repeating sleeper to the unelapsed list,
+		// which may not be correct.  **Add conditional for determing
+		// whether to move the sleeper to the elapsed or unelapsed
+		// lists**
 
 		// We're processing a repeating sleeper, so see if there are any
 		// repetitions we need to handle as well.
