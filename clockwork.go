@@ -292,12 +292,31 @@ func advanceSleepers(s *sleeper, t time.Time) sleeperSet {
 	// in order to send accurate times to each fake ticker's tick channel.
 	lts := make(map[*fakeTicker]time.Time)
 
-	for r := s; r != nil; r = r.next {
+	// Copy the list of sleepers so we don't modify it.
+	l := s // Variable for iterating through s
+	// n will refer to the head of the new linked list later. i is just for
+	// iterating through the copy so we can add more elements.
+	ns := *s
+	n := &ns
+	i := &ns
+	for {
+		if l == nil {
+			break
+		}
+		if l.next != nil {
+			// copy the next sleeper and assign it to i.next
+			z := *l.next
+			i.next = &z
+		}
+		l = l.next
+		i = i.next
+	}
+
+	for r := n; r != nil; r = r.next {
 		// Create a copy of the sleeper and unset its next sleeper so we
 		// don't alter the original list
 		p := *r
 		p.next = nil
-
 		// The sleeper hasn't elapsed yet, so don't process any
 		// repetitions and continue to the next sleeper.
 		if r.until.After(t) {
@@ -316,12 +335,6 @@ func advanceSleepers(s *sleeper, t time.Time) sleeperSet {
 		// We're processing a repeating sleeper, so see if there are any
 		// repetitions we need to handle as well.
 		if r.kind == repeatingSleeper {
-			// TODO: Process all repetitions, not just one! The
-			// simplest way would be to add the new sleeper "e" to
-			// the list we're ranging through now, rather than the
-			// unelapsed/elapsed lists. Maybe copy the whole list
-			// above so we can modify it.
-
 			// Increment our internal map of each sleeper'r latest
 			// time. This lets us assign the `until` field of each
 			// sleeper accurately.
@@ -342,11 +355,12 @@ func advanceSleepers(s *sleeper, t time.Time) sleeperSet {
 				},
 			}
 
-			if lts[r.ticker].After(t) {
-				ss.unelapsed = addSleeper(ss.unelapsed, &e)
-			} else {
-				ss.elapsed = addSleeper(ss.elapsed, &e)
-			}
+			// Add the new sleeper to our copy of the original
+			// sleeprs list so we can process each new entry as
+			// elapsed/unelapsed and add further repetitions if
+			// necessary.
+			n = addSleeper(n, &e)
+
 		}
 	}
 	return ss
