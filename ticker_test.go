@@ -192,3 +192,48 @@ func TestFakeTickerMultipleTicks(t *testing.T) {
 	}
 
 }
+
+// A version of TestFakeTickerMultipleTicks with a small, fixed number of
+// expected ticks for debugging.
+func TestFakeTickerMultipleTicksShorter(t *testing.T) {
+
+	// Simulate testing a minimal function. This simply counts the number of ticks
+	// received until it receives from s, then returns the count of ticks to
+	// result channel r.
+	f := func(k Ticker, s chan struct{}, r chan int) {
+		var i int
+		for {
+			select {
+			case <-k.Chan():
+				fmt.Println("MULTITICKS: incrementing i")
+				i++
+			case <-s:
+				r <- i
+			}
+		}
+	}
+
+	exp := 3
+
+	// Call the test function in a goroutine. The function receives a tick
+	// every millisecond. While the function loops, advance the fake clock
+	// an arbitrary number of milliseconds. The number of ticks receives
+	// should be equal to the number of milliseconds we advance the clock.
+	var a int
+	fc := NewFakeClock()
+	tk := fc.NewTicker(time.Duration(1) * time.Millisecond)
+	s := make(chan struct{})
+	r := make(chan int)
+	go f(tk, s, r)
+	go func(c Clock, s chan struct{}) {
+		c.Sleep(time.Duration(exp) * time.Millisecond)
+		s <- struct{}{}
+	}(fc, s)
+	fc.BlockUntil(2)
+	fc.Advance(time.Duration(exp) * time.Millisecond)
+	a = <-r
+	if a != exp {
+		t.Fatalf("expected to receive %v ticks but got %v", exp, a)
+	}
+
+}
