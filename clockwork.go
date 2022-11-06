@@ -180,10 +180,13 @@ func addSleeper(h, s *sleeper) *sleeper {
 	// all sleepers.
 	var b *sleeper // The previous sleeper
 	for l := h; l != nil; l = l.next {
-		if s == l {
-			// Don't allow duplicate sleepers
+		// Don't allow duplicate sleepers or ticks that
+		// originated from the same ticker.
+		if s == l || (s.until.Equal(l.until) && s.ticker == l.ticker) {
 			break
 		}
+		// We've found the first sleeper that this sleepr is before, so
+		// insert it into the list of sleeprs.
 		if s.until.Before(l.until) ||
 			s.until.Equal(l.until) {
 			s.next = l
