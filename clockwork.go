@@ -337,23 +337,23 @@ func advanceSleepers(s *sleeper, t time.Time) sleeperSet {
 
 		// We're processing a repeating sleeper, so see if there are any
 		// repetitions we need to handle as well.
-		if r.kind == repeatingSleeper {
+		if p.kind == repeatingSleeper {
 			// Increment our internal map of each sleeper'r latest
 			// time. This lets us assign the `until` field of each
 			// sleeper accurately.
-			lt, ok := lts[r.ticker]
+			lt, ok := lts[p.ticker]
 			if ok {
-				lts[r.ticker] = lt.Add(r.ticker.period)
+				lts[p.ticker] = lt.Add(p.ticker.period)
 			} else {
-				lts[r.ticker] = r.until.Add(r.ticker.period)
+				lts[p.ticker] = p.until.Add(p.ticker.period)
 			}
 
 			e := sleeper{
-				until:  lts[r.ticker],
+				until:  lts[p.ticker],
 				kind:   repeatingSleeper,
-				ticker: r.ticker,
+				ticker: p.ticker,
 				notify: func(m time.Time) {
-					r.ticker.c <- m
+					p.ticker.c <- m
 					return
 				},
 			}
