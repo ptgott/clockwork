@@ -113,6 +113,18 @@ type blocker struct {
 	ch    chan struct{}
 }
 
+func makeSleeperNotifyFunc(c chan time.Time) func(m time.Time) {
+	return func(m time.Time) {
+		select {
+		case c <- m:
+
+		default:
+			return
+		}
+	}
+
+}
+
 // After mimics time.After; it waits for the given duration to elapse on the
 // fakeClock, then sends the current time on the returned channel.
 func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
@@ -126,12 +138,9 @@ func (fc *fakeClock) After(d time.Duration) <-chan time.Time {
 	fc.sleepers = addSleeper(
 		fc.sleepers,
 		&sleeper{
-			until: fc.time.Add(d),
-			kind:  oneShotSleeper,
-			notify: func(m time.Time) {
-				fmt.Println("MULTITICKS: NOTIFYING ONESHOT SLEEPER with until ", fc.time.Add(d))
-				t <- m
-			},
+			until:  fc.time.Add(d),
+			kind:   oneShotSleeper,
+			notify: makeSleeperNotifyFunc(t),
 		})
 
 	fc.blockers = notifyBlockers(fc.blockers, countSleepers(fc.sleepers))
@@ -155,10 +164,7 @@ func (fc *fakeClock) addRepeatingSleeper(k *fakeTicker) {
 			until:  fc.time.Add(k.period),
 			kind:   repeatingSleeper,
 			ticker: k,
-			notify: func(m time.Time) {
-				k.c <- m
-				return
-			},
+			notify: makeSleeperNotifyFunc(k.c),
 		})
 	fc.blockers = notifyBlockers(fc.blockers, countSleepers(fc.sleepers))
 	return
@@ -352,10 +358,7 @@ func advanceSleepers(s *sleeper, t time.Time) sleeperSet {
 				until:  lts[p.ticker],
 				kind:   repeatingSleeper,
 				ticker: p.ticker,
-				notify: func(m time.Time) {
-					p.ticker.c <- m
-					return
-				},
+				notify: makeSleeperNotifyFunc(p.ticker.c),
 			}
 
 			// Add the new sleeper to our copy of the original
