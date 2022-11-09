@@ -329,3 +329,69 @@ func TestAdvanceSleepersCounts(t *testing.T) {
 		}
 	})
 }
+
+func TestAssignSleepersToTickers(t *testing.T) {
+
+	fc := NewFakeClock()
+	r := fc.NewTicker(10).(*fakeTicker)
+	r2 := fc.NewTicker(10).(*fakeTicker)
+	m := time.Now()
+
+	sb := sleeper{
+		until:  m.Add(50),
+		kind:   oneShotSleeper,
+		ticker: nil,
+		next:   nil,
+	}
+	s1 := sleeper{
+		until:  m.Add(41),
+		kind:   repeatingSleeper,
+		ticker: r,
+		next:   &sb,
+	}
+	s1a := sleeper{
+		until:  m.Add(40),
+		kind:   repeatingSleeper,
+		ticker: r2,
+		next:   &s1,
+	}
+	s2 := sleeper{
+		until:  m.Add(33),
+		kind:   repeatingSleeper,
+		ticker: r,
+		next:   &s1a,
+	}
+	s2a := sleeper{
+		until:  m.Add(30),
+		kind:   repeatingSleeper,
+		ticker: r2,
+		next:   &s2,
+	}
+
+	s3 := sleeper{
+		until:  m.Add(23),
+		kind:   repeatingSleeper,
+		ticker: r,
+		next:   &s2a,
+	}
+
+	s3a := sleeper{
+		until:  m.Add(20),
+		kind:   repeatingSleeper,
+		ticker: r2,
+		next:   &s3,
+	}
+
+	expected := map[*fakeTicker]*sleeper{
+		r:  &s3,
+		r2: &s3a,
+	}
+
+	actual := assignSleepersToTickers(&s3a)
+
+	if !reflect.DeepEqual(expected, actual) {
+		t.Fatalf("expected assignSleepersToTickers to return:\n%v...but got:\n%v\n",
+			expected, actual)
+	}
+
+}

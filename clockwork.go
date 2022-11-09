@@ -372,6 +372,15 @@ func advanceSleepers(s *sleeper, t time.Time) sleeperSet {
 	return ss
 }
 
+// assignSleepersToTickers takes a linked list of sleepers and arranges them
+// into a map keyed by fake ticker. If a sleeper is not repeating, it will not
+// be added to the map. The map points to the original sleepers, not copies of
+// them, and mutates the sleepers provided in s.
+func assignSleepersToTickers(s *sleeper) map[*fakeTicker]*sleeper {
+	m := make(map[*fakeTicker]*sleeper)
+	return m
+}
+
 // Advance advances fakeClock to a new point in time, ensuring channels from any
 // previous invocations of After are notified appropriately before returning
 func (fc *fakeClock) Advance(d time.Duration) {
