@@ -378,6 +378,19 @@ func advanceSleepers(s *sleeper, t time.Time) sleeperSet {
 // them, and mutates the sleepers provided in s.
 func assignSleepersToTickers(s *sleeper) map[*fakeTicker]*sleeper {
 	m := make(map[*fakeTicker]*sleeper)
+
+	for r := s; r != nil; r = r.next {
+		if r.kind != repeatingSleeper {
+			continue
+		}
+
+		if _, ok := m[r.ticker]; !ok {
+			m[r.ticker] = r
+			continue
+		}
+
+		m[r.ticker] = addSleeper(m[r.ticker], r)
+	}
 	return m
 }
 
