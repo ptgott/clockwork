@@ -256,6 +256,7 @@ func (fc *fakeClock) NewTicker(d time.Duration) Ticker {
 		stop:   make(chan bool, 1),
 		clock:  fc,
 		period: d,
+		mu:     &sync.Mutex{},
 	}
 	ft.runTickThread()
 	return ft
@@ -402,6 +403,10 @@ func (fc *fakeClock) Advance(d time.Duration) {
 	end := fc.time.Add(d)
 	ss := advanceSleepers(fc.sleepers, end)
 	fc.sleepers = ss.unelapsed
+	m := assignSleepersToTickers(ss.elapsed)
+	for k, v := range m {
+		k.elapsedTicks = v
+	}
 
 	for r := ss.elapsed; r != nil; r = r.next {
 		r.notify(r.until)

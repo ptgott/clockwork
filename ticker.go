@@ -1,6 +1,7 @@
 package clockwork
 
 import (
+	"sync"
 	"time"
 )
 
@@ -24,10 +25,23 @@ type fakeTicker struct {
 	stop   chan bool
 	clock  FakeClock
 	period time.Duration
+	// Sleepers with "until" times that are before the current time of the
+	// fake ticker's clock.
+	elapsedTicks *sleeper
+	mu           *sync.Mutex
 }
 
 func (ft *fakeTicker) Chan() <-chan time.Time {
-	return ft.c
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	c := make(chan time.Time, 1)
+	if ft.elapsedTicks != nil {
+		s := *ft.elapsedTicks
+		// advance the elapsed ticks list
+		ft.elapsedTicks = s.next
+		c <- s.until
+	}
+	return c
 }
 
 func (ft *fakeTicker) Stop() {
