@@ -256,7 +256,6 @@ func (fc *fakeClock) NewTicker(d time.Duration) Ticker {
 		stop:   make(chan bool, 1),
 		clock:  fc,
 		period: d,
-		mu:     &sync.Mutex{},
 	}
 	ft.runTickThread()
 	return ft
