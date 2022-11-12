@@ -1,6 +1,7 @@
 package clockwork
 
 import (
+	"sync"
 	"time"
 )
 
@@ -27,11 +28,12 @@ type fakeTicker struct {
 	// Sleepers with "until" times that are before the current time of the
 	// fake ticker's clock.
 	elapsedTicks *sleeper
+	mu           *sync.Mutex
 }
 
 func (ft *fakeTicker) Chan() <-chan time.Time {
-	ft.clock.(*fakeClock).l.Lock()
-	defer ft.clock.(*fakeClock).l.Unlock()
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
 	c := make(chan time.Time, 1)
 	if ft.elapsedTicks != nil {
 		s := *ft.elapsedTicks
