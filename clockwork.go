@@ -374,8 +374,7 @@ func advanceSleepers(s *sleeper, t time.Time) sleeperSet {
 
 // assignSleepersToTickers takes a linked list of sleepers and arranges them
 // into a map keyed by fake ticker. If a sleeper is not repeating, it will not
-// be added to the map. The map points to the original sleepers, not copies of
-// them, and mutates the sleepers provided in s.
+// be added to the map. Map values are copies of sleepers within s.
 func assignSleepersToTickers(s *sleeper) map[*fakeTicker]*sleeper {
 	m := make(map[*fakeTicker]*sleeper)
 
@@ -384,12 +383,17 @@ func assignSleepersToTickers(s *sleeper) map[*fakeTicker]*sleeper {
 			continue
 		}
 
+		// Copy r so we don't add it back to the input loop and trigger
+		// infinite iterations.
+		n := *r
+		n.next = nil
+
 		if _, ok := m[r.ticker]; !ok {
-			m[r.ticker] = r
+			m[r.ticker] = &n
 			continue
 		}
 
-		m[r.ticker] = addSleeper(m[r.ticker], r)
+		m[r.ticker] = addSleeper(m[r.ticker], &n)
 	}
 	return m
 }
