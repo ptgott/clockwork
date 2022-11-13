@@ -227,6 +227,8 @@ func TestFakeTickerMultipleTicksShorter(t *testing.T) {
 	go f(tk, s, r)
 	go func(c Clock, s chan struct{}) {
 		c.Sleep(time.Duration(exp) * time.Millisecond)
+		fmt.Println("sending to the stop channel")
+		// Send to the stop channel
 		s <- struct{}{}
 	}(fc, s)
 	fc.BlockUntil(2)
